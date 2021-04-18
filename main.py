@@ -14,12 +14,13 @@ def print_hi(name):
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    c = C.Client("AAAAAA")
-    c.generateKeysFromMaster()
-    MSG = c.generatePacket(4, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+    c = C.Client("AAAAAAAAA")
     s = S.Server()
     s.addUser(c.username, c.client_master_key)
-    message = s.decodeMSG(MSG, c.username)
-    s.doCommand(message)
+    c.generateKeysFromMaster()
+    MSG = c.generatePacket(0, "bundaskenyer")
+    s.doCommand(s.decodeMSG(MSG, c.username))
+    MSG1 = c.generatePacket(4, "")
+    s.doCommand(s.decodeMSG(MSG1, c.username))
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/

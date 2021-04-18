@@ -8,7 +8,7 @@ from enum import Enum
 import os
 
 from Crypto.Util.Padding import unpad
-from pathvalidate import sanitize_filepath, sanitize_filename
+from pathvalidate import sanitize_filepath, sanitize_filename, sanitize_file_path
 
 MAX_TIME_WINDOW = 30  # Max 3 seconds from send
 
@@ -44,7 +44,7 @@ class Message:
 class User:
     server_master_key = bytes.fromhex("746869732069732064656661756c7420")  # Default key, it wont work with it
     server_key_list = []
-    current_dir = "/"
+    current_dir = ""
     CMD_CNT = 0
     RESP_CNT = 0
     username = ""
@@ -89,8 +89,8 @@ class Server:
         h = HMAC.new(key, digestmod=SHA256)
 
         MAC = bytes.fromhex(h.update(REST_OF_MSG).hexdigest())
-        print(len(MAC))
-        print(len(MAC_GOT))
+        # print(len(MAC))
+        # print(len(MAC_GOT))
 
         if (MAC_GOT != MAC):
             raise ValueError("Mac values are not the same aborting...")
@@ -100,16 +100,19 @@ class Server:
         ENC_MSG: bytes = REST_OF_MSG[15:]
 
         enc_text = ENC_MSG
-        nonce = nonce = TS[2:] + CMD_NUM
+        nonce = TS[2:] + int.from_bytes(CMD_NUM, 'big').to_bytes(2, 'big')
+        #print(f"Nonce {nonce}")
         cipher = AES.new(key, AES.MODE_CTR, nonce=nonce)
         text: bytes = cipher.decrypt(enc_text)
+        #print(text)
         CMD = text[0]
         DATA = text[1:]
         TS: int = int.from_bytes(TS, 'big')
         CMD_NUM: int = int.from_bytes(CMD_NUM, 'big')
+
         USERNAME: str = unpad(USERNAME, 10).decode('utf-8')
-        print(CMD)
-        print(DATA)
+        #print(CMD)
+        #print(DATA)
         return Message(TS, CMD_NUM, USERNAME, CMD, DATA, MAC)
 
     def createDir(self, FolderName: str, user: User):
@@ -127,13 +130,20 @@ class Server:
 
     def setCurDir(self, path: str, user: User):
         if os.path.exists(os.path.join(self.utilGetCurDir(user), path)):
-            user.current_dir = path
+            if self.isInUserDir(user,path):
+                user.current_dir = path
+                return f"new path set: {os.path.join(self.utilGetCurDir(user), path)}"
+            else:
+                return "Not own dir"
         else:
             return "No such path"
 
     def getContents(self, path: str, user: User):
         if os.path.exists(os.path.join(self.utilGetCurDir(user), path)):
-            return os.listdir(os.path.join(self.utilGetCurDir(user), path))
+            if self.isInUserDir(user,path):
+                return os.listdir(os.path.join(self.utilGetCurDir(user), path))
+            else:
+                return "Not your own filesystem -.-"
         else:
             raise ValueError("No such path")
 
@@ -156,12 +166,11 @@ class Server:
             raise ValueError("Message is to old")
         user = None
         for u in self.users:
-            print(u.username)
-            print(msg.USER_NAME)
             if u.username == msg.USER_NAME:
                 user = u
         out = None
-        cmd = Commands(msg.CMD_NUM)
+        cmd = Commands(msg.CMD)
+        # print(cmd)
         if cmd == Commands.MKD:
             out = self.createDir(sanitize_filepath(msg.DATA.decode('utf-8')), user)
         if cmd == Commands.RMD:
@@ -175,11 +184,14 @@ class Server:
         if cmd == Commands.UPL:
             out = self.upload(msg.DATA, user)
         if cmd == Commands.DNL:
-            out = self.download(sanitize_filepath(msg.DATA.decode('utf-8')), user)
+            out = self.download(sanitize_filename(msg.DATA.decode('utf-8')), user)
         if cmd == Commands.RMF:
             out = self.removeFileFromDir(sanitize_filepath(msg.DATA.decode('utf-8')), user)
 
         print(out)
+
+    def isInUserDir(self,user: User, path: str):
+        return dir_in_directory(os.path.join(self.utilGetCurDir(user), path), self.utilGetCurDir(user))
 
 
     def utilGetCurDir(self, user: User):
@@ -187,3 +199,24 @@ class Server:
         user_DIR = os.path.join(BASE_DIR, user.username)
         cur_dir = os.path.join(user_DIR, user.current_dir)
         return cur_dir
+
+
+def file_in_directory(file, directory):  # Stolen from https://stackoverflow.com/questions/3812849/how-to-check-whether
+    # -a-directory-is-a-sub-directory-of-another-directory make both absolute
+    directory = os.path.join(os.path.realpath(directory), '')
+    file = os.path.realpath(file)
+
+    # return true, if the common prefix of both is equal to directory
+    # e.g. /a/b/c/d.rst and directory is /a/b, the common prefix is /a/b
+    return os.path.commonprefix([file, directory]) == directory
+
+
+
+def dir_in_directory(directory1, directory2):  # Main dir first sub dir second
+    # make both absolute
+    directory1 = os.path.join(os.path.realpath(directory1), '')
+    directory2 = os.path.join(os.path.realpath(directory2), '')
+
+    # return true, if the common prefix of both is equal to directory
+    # e.g. /a/b/c/d.rst and directory is /a/b, the common prefix is /a/b
+    return os.path.commonprefix([directory2, directory1]) == directory2

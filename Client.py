@@ -16,8 +16,8 @@ class Client():
 
     def __init__(self, username):
         self.client_master_key = bytes.fromhex("746869732069732064656661756c7420")  # Default key, it wont work with it
-        if len(username) > 80:
-            raise ValueError(f"Username is too long, it should be 10 characters long but it is {len(username)}")
+        if len(username) > 9:
+            raise ValueError(f"Username is too long, it should be 9 characters long maximum, but it is {len(username)}")
         self.username = username
 
     def generateKeysFromMaster(self):
@@ -37,8 +37,7 @@ class Client():
         message = TS.to_bytes(4, 'big') + CMD_NUM.to_bytes(1, 'big') + uname_bytes + enc_cmd_and_data
         h = HMAC.new(self.client_generated_keys[CMD_NUM], digestmod=SHA256)
         MAC = h.update(message).hexdigest()
-        print(self.client_generated_keys[CMD_NUM])
         message += bytes.fromhex(MAC)
         self.CMD_NUM = self.CMD_NUM + 1
-        print(message)
+        #print(message)
         return message
