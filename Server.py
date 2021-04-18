@@ -4,6 +4,37 @@ from Crypto.Protocol.KDF import scrypt
 from Crypto.Hash import SHA3_256, SHA256
 from Crypto.Hash import HMAC
 import time
+from enum import Enum
+
+MAX_TIME_WINDOW = 30 # Max 3 seconds from send
+
+
+class Commands(Enum):
+    MKD = 0
+    RMD = 1
+    GWD = 2
+    CWD = 3
+    LST = 4
+    UPL = 5
+    DNL = 6
+    RMF = 7
+
+
+class Message:
+    TS: int
+    CMD_NUM: int
+    USER_NAME: str
+    CMD: int
+    DATA: bytes
+    MAC: bytes
+
+    def __init__(self, TS, CMD_NUM, USER_NAME, CMD, DATA, MAC):
+        self.TS = TS
+        self.CMD_NUM = CMD_NUM
+        self.USER_NAME = USER_NAME
+        self.CMD = CMD
+        self.DATA = DATA
+        self.MAC = MAC
 
 
 class User:
@@ -64,15 +95,49 @@ class Server:
         USERNAME: bytes = REST_OF_MSG[5:15]
         ENC_MSG: bytes = REST_OF_MSG[15:]
 
-        print(int.from_bytes(TS, 'big'))
-        print(int.from_bytes(CMD_NUM, 'big'))
-        print(USERNAME.decode('utf-8'))
+        TS: int = int.from_bytes(TS, 'big')
+        CMD_NUM: int = int.from_bytes(CMD_NUM, 'big')
+        USERNAME: str = USERNAME.decode('utf-8')
         enc_text = ENC_MSG
         nonce = nonce = TS[2:] + CMD_NUM
-        cipher = AES.new(key,AES.MODE_CTR,nonce=nonce)
-        text : bytes = cipher.decrypt(enc_text)
-        print(text)
+        cipher = AES.new(key, AES.MODE_CTR, nonce=nonce)
+        text: bytes = cipher.decrypt(enc_text)
         CMD = text[0]
         DATA = text[1:].decode('utf8')
         print(CMD)
         print(DATA)
+        return Message(TS, CMD_NUM, USERNAME, CMD, DATA, MAC)
+
+    def createDir(self):
+        return
+    def removeDir(self):
+        return
+    def getCurDir(self):
+        return
+    def setCurDir(self):
+        return
+    def getContents(self):
+        return
+    def upload(self):
+        return
+    def download(self):
+        return
+    def removeFileFromDir(self):
+        return
+
+    def doCommand(self,msg: Message):
+        if int(time.time()) - msg.TS > 30:
+            raise ValueError("Message is to old")
+
+        switch = {
+            Commands.MKD : self.createDir(),
+            Commands.RMD : self.removeDir(),
+            Commands.GWD : self.getCurDir(),
+            Commands.CWD : self.setCurDir(),
+            Commands.LST : self.getContents(),
+            Commands.UPL : self.upload(),
+            Commands.DNL : self.download(),
+            Commands.RMF : self.removeFileFromDir()
+        }
+
+
