@@ -2,6 +2,7 @@ from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import scrypt
 from Crypto.Hash import SHA3_256, SHA256
 from Crypto.Hash import HMAC
+from Crypto.Util.Padding import pad, unpad
 import time
 
 
@@ -15,7 +16,7 @@ class Client():
 
     def __init__(self, username):
         self.client_master_key = bytes.fromhex("746869732069732064656661756c7420")  # Default key, it wont work with it
-        if len(username)>80:
+        if len(username) > 80:
             raise ValueError(f"Username is too long, it should be 10 characters long but it is {len(username)}")
         self.username = username
 
@@ -28,17 +29,16 @@ class Client():
 
         CMD_NUM = self.CMD_NUM
         username = self.username
-        nonce = TS.to_bytes(4,'big')[2:] + CMD_NUM.to_bytes(2,'big')
+        nonce = TS.to_bytes(4, 'big')[2:] + CMD_NUM.to_bytes(2, 'big')
         cipher = AES.new(self.client_generated_keys[CMD_NUM], AES.MODE_CTR, nonce=nonce)
-        cmd_and_data = cmd.to_bytes(1,'big') + bytes(Data,'utf-8')
+        cmd_and_data = cmd.to_bytes(1, 'big') + bytes(Data, 'utf-8')
         enc_cmd_and_data = cipher.encrypt(cmd_and_data)
-        uname_bytes = bytes(username,'utf-8') + bytes(10-len(bytes(username,'utf-8')))
-        message = TS.to_bytes(4,'big') + CMD_NUM.to_bytes(1,'big') + uname_bytes + enc_cmd_and_data
-        h = HMAC.new(self.client_generated_keys[CMD_NUM],digestmod=SHA256)
+        uname_bytes = pad(bytes(username, 'utf-8'), 10)
+        message = TS.to_bytes(4, 'big') + CMD_NUM.to_bytes(1, 'big') + uname_bytes + enc_cmd_and_data
+        h = HMAC.new(self.client_generated_keys[CMD_NUM], digestmod=SHA256)
         MAC = h.update(message).hexdigest()
         print(self.client_generated_keys[CMD_NUM])
-        message+= bytes.fromhex(MAC)
+        message += bytes.fromhex(MAC)
         self.CMD_NUM = self.CMD_NUM + 1
         print(message)
         return message
-

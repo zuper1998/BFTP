@@ -5,6 +5,8 @@
 import Lib.netsim
 import Client as C
 import Server as S
+
+
 def print_hi(name):
     # Use a breakpoint in the code line below to debug your script.
     print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
@@ -14,9 +16,10 @@ def print_hi(name):
 if __name__ == '__main__':
     c = C.Client("AAAAAA")
     c.generateKeysFromMaster()
-    MSG = c.generatePacket(0,"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+    MSG = c.generatePacket(4, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
     s = S.Server()
     s.addUser(c.username, c.client_master_key)
-    s.decodeMSG(MSG,c.username)
+    message = s.decodeMSG(MSG, c.username)
+    s.doCommand(message)
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/

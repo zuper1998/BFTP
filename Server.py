@@ -5,8 +5,12 @@ from Crypto.Hash import SHA3_256, SHA256
 from Crypto.Hash import HMAC
 import time
 from enum import Enum
+import os
 
-MAX_TIME_WINDOW = 30 # Max 3 seconds from send
+from Crypto.Util.Padding import unpad
+from pathvalidate import sanitize_filepath, sanitize_filename
+
+MAX_TIME_WINDOW = 30  # Max 3 seconds from send
 
 
 class Commands(Enum):
@@ -95,49 +99,91 @@ class Server:
         USERNAME: bytes = REST_OF_MSG[5:15]
         ENC_MSG: bytes = REST_OF_MSG[15:]
 
-        TS: int = int.from_bytes(TS, 'big')
-        CMD_NUM: int = int.from_bytes(CMD_NUM, 'big')
-        USERNAME: str = USERNAME.decode('utf-8')
         enc_text = ENC_MSG
         nonce = nonce = TS[2:] + CMD_NUM
         cipher = AES.new(key, AES.MODE_CTR, nonce=nonce)
         text: bytes = cipher.decrypt(enc_text)
         CMD = text[0]
-        DATA = text[1:].decode('utf8')
+        DATA = text[1:]
+        TS: int = int.from_bytes(TS, 'big')
+        CMD_NUM: int = int.from_bytes(CMD_NUM, 'big')
+        USERNAME: str = unpad(USERNAME, 10).decode('utf-8')
         print(CMD)
         print(DATA)
         return Message(TS, CMD_NUM, USERNAME, CMD, DATA, MAC)
 
-    def createDir(self):
-        return
-    def removeDir(self):
-        return
-    def getCurDir(self):
-        return
-    def setCurDir(self):
-        return
-    def getContents(self):
-        return
-    def upload(self):
-        return
-    def download(self):
-        return
-    def removeFileFromDir(self):
-        return
+    def createDir(self, FolderName: str, user: User):
+        folder_DIR = os.path.join(self.utilGetCurDir(user))
+        os.mkdir(folder_DIR)
+        return "Folder Created"
 
-    def doCommand(self,msg: Message):
+    def removeDir(self, FolderName: str, user: User):
+        folder_DIR = os.path.join(self.utilGetCurDir(user))
+        os.rmdir(folder_DIR)
+        return "Done removing"
+
+    def getCurDir(self, user: User):
+        return self.utilGetCurDir(user)
+
+    def setCurDir(self, path: str, user: User):
+        if os.path.exists(os.path.join(self.utilGetCurDir(user), path)):
+            user.current_dir = path
+        else:
+            return "No such path"
+
+    def getContents(self, path: str, user: User):
+        if os.path.exists(os.path.join(self.utilGetCurDir(user), path)):
+            return os.listdir(os.path.join(self.utilGetCurDir(user), path))
+        else:
+            raise ValueError("No such path")
+
+    # TODO FAST! upload datamethod
+    def upload(self, Data: bytes, user: User):
+
+        return "Upload completed"
+
+    def download(self, file: str, user: User):
+        path_to_file = os.path.join(self.utilGetCurDir(user), file)
+        return open(path_to_file).read()
+
+    def removeFileFromDir(self, path_and_file: str, user: User):
+        path_to_file = os.path.join(self.utilGetCurDir(user), path_and_file)
+        os.remove(path_to_file)
+        return f"{path_to_file} successfully deleted"
+
+    def doCommand(self, msg: Message):
         if int(time.time()) - msg.TS > 30:
             raise ValueError("Message is to old")
+        user = None
+        for u in self.users:
+            print(u.username)
+            print(msg.USER_NAME)
+            if u.username == msg.USER_NAME:
+                user = u
+        out = None
+        cmd = Commands(msg.CMD_NUM)
+        if cmd == Commands.MKD:
+            out = self.createDir(sanitize_filepath(msg.DATA.decode('utf-8')), user)
+        if cmd == Commands.RMD:
+            out = self.removeDir(sanitize_filepath(msg.DATA.decode('utf-8')), user)
+        if cmd == Commands.GWD:
+            out = self.getCurDir(user)
+        if cmd == Commands.CWD:
+            out = self.setCurDir(sanitize_filepath(msg.DATA.decode('utf-8')), user)
+        if cmd == Commands.LST:
+            out = self.getContents(sanitize_filepath(msg.DATA.decode('utf-8')), user)
+        if cmd == Commands.UPL:
+            out = self.upload(msg.DATA, user)
+        if cmd == Commands.DNL:
+            out = self.download(sanitize_filepath(msg.DATA.decode('utf-8')), user)
+        if cmd == Commands.RMF:
+            out = self.removeFileFromDir(sanitize_filepath(msg.DATA.decode('utf-8')), user)
 
-        switch = {
-            Commands.MKD : self.createDir(),
-            Commands.RMD : self.removeDir(),
-            Commands.GWD : self.getCurDir(),
-            Commands.CWD : self.setCurDir(),
-            Commands.LST : self.getContents(),
-            Commands.UPL : self.upload(),
-            Commands.DNL : self.download(),
-            Commands.RMF : self.removeFileFromDir()
-        }
+        print(out)
 
 
+    def utilGetCurDir(self, user: User):
+        BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        user_DIR = os.path.join(BASE_DIR, user.username)
+        cur_dir = os.path.join(user_DIR, user.current_dir)
+        return cur_dir
