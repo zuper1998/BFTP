@@ -80,8 +80,12 @@ class Server:
     def addUser(self, Uname, Server_Master):  # TODO set username master pwd
         BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         user_DIR = os.path.join(BASE_DIR, Uname)
-        os.mkdir(user_DIR)
-        self.users.append(User(Uname,Server_Master))
+        self.users.append(User(Uname, Server_Master))
+        if os.path.exists(user_DIR):
+            pass
+        else:
+            os.mkdir(user_DIR)
+
 
     def decodeMSG(self, MSG: bytes):
         MAC_GOT = MSG[len(MSG) - 32:]
