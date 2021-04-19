@@ -75,9 +75,9 @@ class User:
 
 
 class Server:
-    users = []
+    users = [] # TODO: Persistence
 
-    def addUser(self, Uname, Server_Master):  # TODO set username master pwd
+    def addUser(self, Uname, Server_Master):
         BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         user_DIR = os.path.join(BASE_DIR, Uname)
         self.users.append(User(Uname, Server_Master))
