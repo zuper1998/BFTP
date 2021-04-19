@@ -6,8 +6,9 @@ from Crypto.Hash import HMAC
 import time
 from enum import Enum
 import os
+from netsim.netinterface import network_interface
 
-from Crypto.Util.Padding import unpad
+from Crypto.Util.Padding import unpad, pad
 from pathvalidate import sanitize_filepath, sanitize_filename, sanitize_file_path
 
 MAX_TIME_WINDOW = 30  # Max 3 seconds from send
@@ -22,6 +23,9 @@ class Commands(Enum):
     UPL = 5
     DNL = 6
     RMF = 7
+    RPLY = 8
+    RPLY_UPL = 9
+
 
 
 class Message:
@@ -50,7 +54,8 @@ class User:
     username = ""
     password = ""
 
-    def __init__(self, username):
+    def __init__(self, username,ServerMasterKey=bytes.fromhex("746869732069732064656661756c7420")):
+        self.server_master_key = ServerMasterKey
         self.username = username
         self.generateKeysFromMaster()
 
@@ -58,9 +63,9 @@ class User:
         salt = SHA256.new(bytes(self.username, 'utf-8')).hexdigest()
         self.server_key_list = scrypt(self.server_master_key, salt, int(128 / 8), 2 ** 14, 8, 1, 4000)
 
-    def getKeyRec(self):
-        key = self.server_key_list[self.CMD_CNT]
-        self.CMD_CNT += 1
+    def getKeyRec(self, cnt: int):
+        key = self.server_key_list[cnt]
+        self.CMD_CNT = cnt
         return key
 
     def getKeyResp(self):
@@ -70,24 +75,28 @@ class User:
 
 
 class Server:
-    users = []
+    users = [] # TODO: Persistence
 
-    def addUser(self, Uname, Server_Master):  # TODO set username master pwd
-        self.users.append(User(Uname))
+    def addUser(self, Uname, Server_Master):
+        BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        user_DIR = os.path.join(BASE_DIR, Uname)
+        self.users.append(User(Uname, Server_Master))
+        if os.path.exists(user_DIR):
+            pass
+        else:
+            os.mkdir(user_DIR)
 
-    def waitForMSG(self):
-        return 0
 
     def decodeMSG(self, MSG: bytes):
         MAC_GOT = MSG[len(MSG) - 32:]
         REST_OF_MSG = MSG[:len(MSG) - 32]
         user = None
         USERNAME: bytes = REST_OF_MSG[5:15]
-
+        CMD_NUM: bytes = REST_OF_MSG[4:5]
         for i in self.users:
             if i.username == unpad(USERNAME, 10).decode('utf-8'):
                 user = i
-        key = user.getKeyRec()
+        key = user.getKeyRec(int.from_bytes(CMD_NUM, 'big'))
         h = HMAC.new(key, digestmod=SHA256)
 
         MAC = bytes.fromhex(h.update(REST_OF_MSG).hexdigest())
@@ -128,8 +137,11 @@ class Server:
     def removeDir(self, FolderName: str, user: User):
         folder_DIR = os.path.join(self.utilGetCurDir(user), FolderName)
         if os.path.exists(folder_DIR):
-            os.rmdir(folder_DIR)
-            return "Done removing"
+            try:
+                os.rmdir(folder_DIR)
+                return "Done removing"
+            except:
+                return "Directory not empty"
         else:
             return f"There is no folder named {FolderName}"
 
@@ -139,7 +151,8 @@ class Server:
     def setCurDir(self, path: str, user: User):
         if os.path.exists(os.path.join(self.utilGetCurDir(user), path)):
             if self.isInUserDir(user, path):
-                user.current_dir = path
+                user.current_dir = os.path.normpath(os.path.join(user.current_dir,path))
+
                 return f"new path set: {os.path.join(self.utilGetCurDir(user))}"
             else:
                 return "Not own dir"
@@ -155,8 +168,7 @@ class Server:
         else:
             return f"{path} does not exits"
 
-    # TODO FAST! upload datamethod
-    ### First 10 bytes filename, then the data to put there
+    # First 10 bytes filename, then the data to put there
     def upload(self, Data: bytes, user: User):
         # Somehow get the filename and the data to put
         index = Data.index(bytes([0, 0, 0, 8]))
@@ -164,7 +176,7 @@ class Server:
         data = (Data[index + 4:])
         path = self.utilGetCurDir(user)
         file_path = os.path.join(path, filename)
-        f = open(file_path,"wb")
+        f = open(file_path, "wb")
         f.write(data)
 
         return "Upload completed"
@@ -173,7 +185,9 @@ class Server:
         path_to_file = os.path.join(self.utilGetCurDir(user), file)
         if os.path.exists(path_to_file):
             if self.isInUserDir(user, file):
-                return open(path_to_file).read()
+                file_content: bytes = open(path_to_file, "br").read()
+                file_name = os.path.basename(path_to_file)
+                return bytes(file_name, 'utf-8') + bytes([0, 0, 0, 8]) + file_content
             else:
                 return "File not in your folder"
         return "File does not exists"
@@ -216,16 +230,50 @@ class Server:
         if cmd == Commands.RMF:
             out = self.removeFileFromDir(sanitize_filepath(msg.DATA.decode('utf-8')), user)
 
-        print(out)
+
+        return out
 
     def isInUserDir(self, user: User, path: str):
-        return dir_in_directory(os.path.join(self.utilGetCurDir(user), path), self.utilGetCurDir(user))
+        BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        user_DIR = os.path.join(BASE_DIR, user.username)
+        return dir_in_directory(os.path.join(self.utilGetCurDir(user), path),user_DIR)
 
     def utilGetCurDir(self, user: User):
         BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         user_DIR = os.path.join(BASE_DIR, user.username)
         cur_dir = os.path.join(user_DIR, user.current_dir)
+        cur_dir = os.path.realpath(cur_dir)
+        print(user.current_dir)
+        print(cur_dir)
         return cur_dir
+
+    def genReply(self, reply_data: bytes, uname: str, cmd: int):
+
+        TS = int(time.time())
+        user: User = None
+        for u in self.users:
+            if u.username == uname:
+                user = u
+        if user is None:
+            raise ValueError(f"No user named {uname}")
+        CMD_NUM = int(user.CMD_CNT)
+        username = "SERVER"
+        key = user.getKeyRec(CMD_NUM)
+        nonce = TS.to_bytes(4, 'big')[2:] + CMD_NUM.to_bytes(2, 'big')
+        cipher = AES.new(key, AES.MODE_CTR, nonce=nonce)
+        cmd_and_data = cmd.to_bytes(1, 'big') + reply_data
+        enc_cmd_and_data = cipher.encrypt(cmd_and_data)
+        uname_bytes = pad(bytes(username, 'utf-8'), 10)
+        message = TS.to_bytes(4, 'big') + CMD_NUM.to_bytes(1, 'big') + uname_bytes + enc_cmd_and_data
+        h = HMAC.new(key, digestmod=SHA256)
+        MAC = h.update(message).hexdigest()
+        message += bytes.fromhex(MAC)
+        return message
+
+    # Register User
+    def registerUser(self, DATA: bytes,username: str):
+        self.addUser(username, bytes)
+        return "Registration successful"
 
 
 def file_in_directory(file, directory):  # Stolen from https://stackoverflow.com/questions/3812849/how-to-check-whether
@@ -246,3 +294,25 @@ def dir_in_directory(directory1, directory2):  # Main dir first sub dir second
     # return true, if the common prefix of both is equal to directory
     # e.g. /a/b/c/d.rst and directory is /a/b, the common prefix is /a/b
     return os.path.commonprefix([directory2, directory1]) == directory2
+
+
+if __name__ == "__main__":
+    s = Server()
+    netif = network_interface(s.utilGetCurDir(user=User("")) + "\\DSR\\", "S")
+    print(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    # TODO: Register and key exchange
+    status, msg = netif.receive_msg(blocking=True)
+    s.addUser(unpad(msg[:10],10).decode('utf-8'), msg[10:])
+
+    while True:
+
+        status, msg = netif.receive_msg(blocking=True)
+        MSG = s.decodeMSG(msg)
+        reply_data = s.doCommand(MSG)
+
+        if MSG.CMD == Commands.DNL.value:
+            reply = s.genReply(reply_data, MSG.USER_NAME, Commands.RPLY_UPL.value)
+            netif.send_msg("C", reply)
+        else:
+            reply = s.genReply(bytes(str(reply_data), 'utf-8'), MSG.USER_NAME, Commands.RPLY.value)
+            netif.send_msg("C", reply)

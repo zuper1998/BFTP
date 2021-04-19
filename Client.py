@@ -7,18 +7,13 @@ import os
 import time
 from enum import Enum
 
+from Server import Message, Commands
+from netsim.netinterface import network_interface
+
 
 # DSR C-> S  TS | CMD_NUM | USER_NAME | CMD | DATA* | MAC
 
-class Commands(Enum):
-    MKD = 0
-    RMD = 1
-    GWD = 2
-    CWD = 3
-    LST = 4
-    UPL = 5
-    DNL = 6
-    RMF = 7
+
 
 
 class Client():
@@ -28,7 +23,7 @@ class Client():
     CMD_NUM = 0
 
     def __init__(self, username):
-        self.client_master_key = bytes.fromhex("746869732069732064656661756c7420")  # Default key, it wont work with it
+        self.client_master_key = bytes(0)  # Default key, it wont work with it
         if len(username) > 9:
             raise ValueError(f"Username is too long, it should be 9 characters long maximum, but it is {len(username)}")
         self.username = username
@@ -70,13 +65,78 @@ class Client():
         comd_arr = command.split(" ")
         folder_file_name: str = ""
         if len(comd_arr) > 0:
-            cmd = Commands[comd_arr[0]]
-            print(cmd)
-        if len(comd_arr)>1:
+            try:
+                cmd = Commands[comd_arr[0].upper()]
+            except:
+                print("Command not found")
+                return
+        if len(comd_arr) > 1:
             folder_file_name: str = comd_arr[1]
-
 
         if cmd == Commands.UPL:
             return self.generatePacket(cmd.value, self.upload(folder_file_name))
         else:
             return self.generatePacket(cmd.value, bytes(folder_file_name, 'utf-8'))
+
+    def decodeMsg(self, MSG: bytes):
+        MAC_GOT = MSG[len(MSG) - 32:]
+        REST_OF_MSG = MSG[:len(MSG) - 32]
+        CMD_NUM: bytes = REST_OF_MSG[4:5]
+        key = self.client_generated_keys[int.from_bytes(CMD_NUM, 'big')]
+        self.CMD_NUM = int.from_bytes(CMD_NUM, 'big')
+        h = HMAC.new(key, digestmod=SHA256)
+        MAC = bytes.fromhex(h.update(REST_OF_MSG).hexdigest())
+        # print(len(MAC))
+        # print(len(MAC_GOT))
+        if MAC_GOT != MAC:
+            raise ValueError("Mac values are not the same aborting...")
+        TS: bytes = REST_OF_MSG[:4]
+        CMD_NUM: bytes = REST_OF_MSG[4:5]
+        USERNAME: bytes = REST_OF_MSG[5:15]
+        ENC_MSG: bytes = REST_OF_MSG[15:]
+
+        nonce = TS[2:] + int.from_bytes(CMD_NUM, 'big').to_bytes(2, 'big')
+        cipher = AES.new(key, AES.MODE_CTR, nonce=nonce)
+        text: bytes = cipher.decrypt(ENC_MSG)
+        CMD = text[0]
+        DATA = text[1:]
+        TS: int = int.from_bytes(TS, 'big')
+        CMD_NUM: int = int.from_bytes(CMD_NUM, 'big')
+        USERNAME: str = unpad(USERNAME, 10).decode('utf-8')
+        return Message(TS, CMD_NUM, USERNAME, CMD, DATA, MAC)
+
+    def processMessage(self, MSG_R: Message):
+
+        if MSG_R.CMD == Commands.RPLY.value:
+            print(MSG_R.DATA.decode('utf-8'))
+        if MSG_R.CMD == Commands.RPLY_UPL.value:
+            Data = MSG_R.DATA
+            index = Data.index(bytes([0, 0, 0, 8]))
+            filename: str = (Data[:index].decode('utf-8'))
+            data = (Data[index + 4:])
+            saveFile(filename, data)
+            print(f"{filename} downloaded")
+
+    def genPrivateKey(self): #TODO: generate real masterKey
+        self.client_master_key=bytes.fromhex("746869732069732064656661756c7420")
+        return bytes.fromhex("746869732069732064656661756c7420")
+
+
+def saveFile(name: str, Data: bytes):
+    open(f"{os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), name)}", "wb").write(Data)
+
+
+if __name__ == "__main__":
+    c = Client(input(f"give username:"))
+    netif = network_interface(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "\\DSR\\", "C")
+    # Generate Master and send it to Server
+    netif.send_msg("S",pad(bytes(c.username,'utf-8'),10)+c.genPrivateKey())
+
+    c.generateKeysFromMaster()
+    while True:
+        msg = c.getCommand(input(f"{os.path.dirname(os.path.dirname(os.path.abspath(__file__)))} $"))
+        if msg:
+            netif.send_msg("S", msg)
+            stat, msg_r = netif.receive_msg(blocking=True)
+            MSG_R = c.decodeMsg(msg_r)
+            c.processMessage(MSG_R)
