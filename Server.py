@@ -101,38 +101,44 @@ class Server:
 
         enc_text = ENC_MSG
         nonce = TS[2:] + int.from_bytes(CMD_NUM, 'big').to_bytes(2, 'big')
-        #print(f"Nonce {nonce}")
+        # print(f"Nonce {nonce}")
         cipher = AES.new(key, AES.MODE_CTR, nonce=nonce)
         text: bytes = cipher.decrypt(enc_text)
-        #print(text)
+        # print(text)
         CMD = text[0]
         DATA = text[1:]
         TS: int = int.from_bytes(TS, 'big')
         CMD_NUM: int = int.from_bytes(CMD_NUM, 'big')
 
         USERNAME: str = unpad(USERNAME, 10).decode('utf-8')
-        #print(CMD)
-        #print(DATA)
+        # print(CMD)
+        # print(DATA)
         return Message(TS, CMD_NUM, USERNAME, CMD, DATA, MAC)
 
     def createDir(self, FolderName: str, user: User):
-        folder_DIR = os.path.join(self.utilGetCurDir(user))
-        os.mkdir(folder_DIR)
-        return "Folder Created"
+        folder_DIR = os.path.join(self.utilGetCurDir(user), FolderName)
+        if self.isInUserDir(user, folder_DIR):
+            os.mkdir(folder_DIR)
+            return "Folder Created"
+        else:
+            return "Not in your own subdomain"
 
     def removeDir(self, FolderName: str, user: User):
-        folder_DIR = os.path.join(self.utilGetCurDir(user))
-        os.rmdir(folder_DIR)
-        return "Done removing"
+        folder_DIR = os.path.join(self.utilGetCurDir(user), FolderName)
+        if os.path.exists(folder_DIR):
+            os.rmdir(folder_DIR)
+            return "Done removing"
+        else:
+            return f"There is no folder named {FolderName}"
 
     def getCurDir(self, user: User):
         return self.utilGetCurDir(user)
 
     def setCurDir(self, path: str, user: User):
         if os.path.exists(os.path.join(self.utilGetCurDir(user), path)):
-            if self.isInUserDir(user,path):
+            if self.isInUserDir(user, path):
                 user.current_dir = path
-                return f"new path set: {os.path.join(self.utilGetCurDir(user), path)}"
+                return f"new path set: {os.path.join(self.utilGetCurDir(user))}"
             else:
                 return "Not own dir"
         else:
@@ -140,26 +146,45 @@ class Server:
 
     def getContents(self, path: str, user: User):
         if os.path.exists(os.path.join(self.utilGetCurDir(user), path)):
-            if self.isInUserDir(user,path):
+            if self.isInUserDir(user, path):
                 return os.listdir(os.path.join(self.utilGetCurDir(user), path))
             else:
                 return "Not your own filesystem -.-"
         else:
-            raise ValueError("No such path")
+            return f"{path} does not exits"
 
     # TODO FAST! upload datamethod
+    ### First 10 bytes filename, then the data to put there
     def upload(self, Data: bytes, user: User):
+        # Somehow get the filename and the data to put
+        index = Data.index(bytes([0, 0, 0, 8]))
+        filename: str = (Data[:index].decode('utf-8'))
+        data = (Data[index + 4:])
+        path = self.utilGetCurDir(user)
+        file_path = os.path.join(path, filename)
+        f = open(file_path,"wb")
+        f.write(data)
 
         return "Upload completed"
 
     def download(self, file: str, user: User):
         path_to_file = os.path.join(self.utilGetCurDir(user), file)
-        return open(path_to_file).read()
+        if os.path.exists(path_to_file):
+            if self.isInUserDir(user, file):
+                return open(path_to_file).read()
+            else:
+                return "File not in your folder"
+        return "File does not exists"
 
     def removeFileFromDir(self, path_and_file: str, user: User):
         path_to_file = os.path.join(self.utilGetCurDir(user), path_and_file)
-        os.remove(path_to_file)
-        return f"{path_to_file} successfully deleted"
+        if os.path.exists(path_to_file):
+            if self.isInUserDir(user, path_to_file):
+                os.remove(path_to_file)
+                return f"{path_to_file} successfully deleted"
+            else:
+                return "File not in your folder"
+        return "File does not exists"
 
     def doCommand(self, msg: Message):
         if int(time.time()) - msg.TS > 30:
@@ -171,6 +196,7 @@ class Server:
         out = None
         cmd = Commands(msg.CMD)
         # print(cmd)
+
         if cmd == Commands.MKD:
             out = self.createDir(sanitize_filepath(msg.DATA.decode('utf-8')), user)
         if cmd == Commands.RMD:
@@ -190,9 +216,8 @@ class Server:
 
         print(out)
 
-    def isInUserDir(self,user: User, path: str):
+    def isInUserDir(self, user: User, path: str):
         return dir_in_directory(os.path.join(self.utilGetCurDir(user), path), self.utilGetCurDir(user))
-
 
     def utilGetCurDir(self, user: User):
         BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -209,7 +234,6 @@ def file_in_directory(file, directory):  # Stolen from https://stackoverflow.com
     # return true, if the common prefix of both is equal to directory
     # e.g. /a/b/c/d.rst and directory is /a/b, the common prefix is /a/b
     return os.path.commonprefix([file, directory]) == directory
-
 
 
 def dir_in_directory(directory1, directory2):  # Main dir first sub dir second

@@ -5,7 +5,7 @@
 import Lib.netsim
 import Client as C
 import Server as S
-
+from Server import Commands
 
 def print_hi(name):
     # Use a breakpoint in the code line below to debug your script.
@@ -18,9 +18,9 @@ if __name__ == '__main__':
     s = S.Server()
     s.addUser(c.username, c.client_master_key)
     c.generateKeysFromMaster()
-    MSG = c.generatePacket(0, "bundaskenyer")
+    MSG = c.generatePacket(Commands.GWD.value, c.upload("bababoe"))
     s.doCommand(s.decodeMSG(MSG, c.username))
-    MSG1 = c.generatePacket(4, "")
+    MSG1 = c.generatePacket(Commands.LST.value, bytes("",'utf-8'))
     s.doCommand(s.decodeMSG(MSG1, c.username))
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
