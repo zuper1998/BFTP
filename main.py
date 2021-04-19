@@ -7,20 +7,12 @@ import Client as C
 import Server as S
 from Server import Commands
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
-
-
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     c = C.Client("AAAAAAAAA")
     s = S.Server()
     s.addUser(c.username, c.client_master_key)
     c.generateKeysFromMaster()
-    MSG = c.generatePacket(Commands.GWD.value, c.upload("bababoe"))
-    s.doCommand(s.decodeMSG(MSG, c.username))
-    MSG1 = c.generatePacket(Commands.LST.value, bytes("",'utf-8'))
-    s.doCommand(s.decodeMSG(MSG1, c.username))
-
+    while(True):
+        s.doCommand(s.decodeMSG(c.getCommand(input())))
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/

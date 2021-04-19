@@ -78,12 +78,14 @@ class Server:
     def waitForMSG(self):
         return 0
 
-    def decodeMSG(self, MSG: bytes, username):
+    def decodeMSG(self, MSG: bytes):
         MAC_GOT = MSG[len(MSG) - 32:]
         REST_OF_MSG = MSG[:len(MSG) - 32]
         user = None
+        USERNAME: bytes = REST_OF_MSG[5:15]
+
         for i in self.users:
-            if i.username == username:
+            if i.username == unpad(USERNAME, 10).decode('utf-8'):
                 user = i
         key = user.getKeyRec()
         h = HMAC.new(key, digestmod=SHA256)
