@@ -27,6 +27,7 @@ class Commands(Enum):
     RPLY_UPL = 9
 
 
+
 class Message:
     TS: int
     CMD_NUM: int
@@ -53,7 +54,8 @@ class User:
     username = ""
     password = ""
 
-    def __init__(self, username):
+    def __init__(self, username,ServerMasterKey=bytes.fromhex("746869732069732064656661756c7420")):
+        self.server_master_key = ServerMasterKey
         self.username = username
         self.generateKeysFromMaster()
 
@@ -76,10 +78,10 @@ class Server:
     users = []
 
     def addUser(self, Uname, Server_Master):  # TODO set username master pwd
-        self.users.append(User(Uname))
-
-    def waitForMSG(self):
-        return 0
+        BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        user_DIR = os.path.join(BASE_DIR, Uname)
+        os.mkdir(user_DIR)
+        self.users.append(User(Uname,Server_Master))
 
     def decodeMSG(self, MSG: bytes):
         MAC_GOT = MSG[len(MSG) - 32:]
@@ -145,7 +147,8 @@ class Server:
     def setCurDir(self, path: str, user: User):
         if os.path.exists(os.path.join(self.utilGetCurDir(user), path)):
             if self.isInUserDir(user, path):
-                user.current_dir = path
+                user.current_dir = os.path.normpath(os.path.join(user.current_dir,path))
+
                 return f"new path set: {os.path.join(self.utilGetCurDir(user))}"
             else:
                 return "Not own dir"
@@ -161,8 +164,7 @@ class Server:
         else:
             return f"{path} does not exits"
 
-    # TODO FAST! upload datamethod
-    ### First 10 bytes filename, then the data to put there
+    # First 10 bytes filename, then the data to put there
     def upload(self, Data: bytes, user: User):
         # Somehow get the filename and the data to put
         index = Data.index(bytes([0, 0, 0, 8]))
@@ -224,15 +226,21 @@ class Server:
         if cmd == Commands.RMF:
             out = self.removeFileFromDir(sanitize_filepath(msg.DATA.decode('utf-8')), user)
 
+
         return out
 
     def isInUserDir(self, user: User, path: str):
-        return dir_in_directory(os.path.join(self.utilGetCurDir(user), path), self.utilGetCurDir(user))
+        BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        user_DIR = os.path.join(BASE_DIR, user.username)
+        return dir_in_directory(os.path.join(self.utilGetCurDir(user), path),user_DIR)
 
     def utilGetCurDir(self, user: User):
         BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         user_DIR = os.path.join(BASE_DIR, user.username)
         cur_dir = os.path.join(user_DIR, user.current_dir)
+        cur_dir = os.path.realpath(cur_dir)
+        print(user.current_dir)
+        print(cur_dir)
         return cur_dir
 
     def genReply(self, reply_data: bytes, uname: str, cmd: int):
@@ -242,7 +250,8 @@ class Server:
         for u in self.users:
             if u.username == uname:
                 user = u
-
+        if user is None:
+            raise ValueError(f"No user named {uname}")
         CMD_NUM = int(user.CMD_CNT)
         username = "SERVER"
         key = user.getKeyRec(CMD_NUM)
@@ -256,6 +265,11 @@ class Server:
         MAC = h.update(message).hexdigest()
         message += bytes.fromhex(MAC)
         return message
+
+    # Register User
+    def registerUser(self, DATA: bytes,username: str):
+        self.addUser(username, bytes)
+        return "Registration successful"
 
 
 def file_in_directory(file, directory):  # Stolen from https://stackoverflow.com/questions/3812849/how-to-check-whether
@@ -280,10 +294,14 @@ def dir_in_directory(directory1, directory2):  # Main dir first sub dir second
 
 if __name__ == "__main__":
     s = Server()
-    netif = network_interface(s.utilGetCurDir(user=User("")) + "DSR\\", "S")
-    s.addUser("AAAAAAAAA", bytes.fromhex("746869732069732064656661756c7420"))
+    netif = network_interface(s.utilGetCurDir(user=User("")) + "\\DSR\\", "S")
+    print(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    # TODO: Register and key exchange
+    status, msg = netif.receive_msg(blocking=True)
+    s.addUser(unpad(msg[:10],10).decode('utf-8'), msg[10:])
 
     while True:
+
         status, msg = netif.receive_msg(blocking=True)
         MSG = s.decodeMSG(msg)
         reply_data = s.doCommand(MSG)
