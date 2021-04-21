@@ -91,8 +91,8 @@ class Server:
         MAC_GOT = MSG[len(MSG) - 32:]
         REST_OF_MSG = MSG[:len(MSG) - 32]
         user = None
-        USERNAME: bytes = REST_OF_MSG[5:15]
-        CMD_NUM: bytes = REST_OF_MSG[4:5]
+        CMD_NUM: bytes = REST_OF_MSG[5:6]
+        USERNAME: bytes = REST_OF_MSG[6:16]
         for i in self.users:
             if i.username == unpad(USERNAME, 10).decode('utf-8'):
                 user = i
@@ -100,15 +100,16 @@ class Server:
         h = HMAC.new(key, digestmod=SHA256)
 
         MAC = bytes.fromhex(h.update(REST_OF_MSG).hexdigest())
-        # print(len(MAC))
-        # print(len(MAC_GOT))
+        print(len(MAC))
+        print(len(MAC_GOT))
 
-        if (MAC_GOT != MAC):
+        if MAC_GOT != MAC:
             raise ValueError("Mac values are not the same aborting...")
-        TS: bytes = REST_OF_MSG[:4]
-        CMD_NUM: bytes = REST_OF_MSG[4:5]
-        USERNAME: bytes = REST_OF_MSG[5:15]
-        ENC_MSG: bytes = REST_OF_MSG[15:]
+        MSG_TYPE: bytes = REST_OF_MSG[0:1]
+        TS: bytes = REST_OF_MSG[1:5]
+        CMD_NUM: bytes = REST_OF_MSG[5:6]
+        USERNAME: bytes = REST_OF_MSG[6:16]
+        ENC_MSG: bytes = REST_OF_MSG[16:]
 
         enc_text = ENC_MSG
         nonce = TS[2:] + int.from_bytes(CMD_NUM, 'big').to_bytes(2, 'big')
@@ -248,6 +249,7 @@ class Server:
         return cur_dir
 
     def genReply(self, reply_data: bytes, uname: str, cmd: int):
+        msg_type: int = 2
 
         TS = int(time.time())
         user: User = None
@@ -264,7 +266,7 @@ class Server:
         cmd_and_data = cmd.to_bytes(1, 'big') + reply_data
         enc_cmd_and_data = cipher.encrypt(cmd_and_data)
         uname_bytes = pad(bytes(username, 'utf-8'), 10)
-        message = TS.to_bytes(4, 'big') + CMD_NUM.to_bytes(1, 'big') + uname_bytes + enc_cmd_and_data
+        message = msg_type.to_bytes(1,'big')+ TS.to_bytes(4, 'big') + CMD_NUM.to_bytes(1, 'big') + uname_bytes + enc_cmd_and_data
         h = HMAC.new(key, digestmod=SHA256)
         MAC = h.update(message).hexdigest()
         message += bytes.fromhex(MAC)
@@ -307,12 +309,13 @@ if __name__ == "__main__":
     while True:
 
         status, msg = netif.receive_msg(blocking=True)
-        MSG = s.decodeMSG(msg)
-        reply_data = s.doCommand(MSG)
-
-        if MSG.CMD == Commands.DNL.value:
-            reply = s.genReply(reply_data, MSG.USER_NAME, Commands.RPLY_UPL.value)
-            netif.send_msg("C", reply)
-        else:
-            reply = s.genReply(bytes(str(reply_data), 'utf-8'), MSG.USER_NAME, Commands.RPLY.value)
-            netif.send_msg("C", reply)
+        msg_type = int.from_bytes(msg[0:1], 'big')
+        if msg_type == 2:
+            MSG = s.decodeMSG(msg)
+            reply_data = s.doCommand(MSG)
+            if MSG.CMD == Commands.DNL.value:
+                reply = s.genReply(reply_data, MSG.USER_NAME, Commands.RPLY_UPL.value)
+                netif.send_msg("C", reply)
+            else:
+                reply = s.genReply(bytes(str(reply_data), 'utf-8'), MSG.USER_NAME, Commands.RPLY.value)
+                netif.send_msg("C", reply)

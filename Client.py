@@ -14,8 +14,6 @@ from netsim.netinterface import network_interface
 # DSR C-> S  TS | CMD_NUM | USER_NAME | CMD | DATA* | MAC
 
 
-
-
 class Client():
     client_master_key: bytes = bytes(0)
     client_generated_keys = []
@@ -33,6 +31,7 @@ class Client():
         self.client_generated_keys = scrypt(self.client_master_key, salt, int(128 / 8), 2 ** 14, 8, 1, 4000)
 
     def generatePacket(self, cmd: int, Data: bytes):
+        msg_type: int = 2
         TS = int(time.time())
 
         CMD_NUM = self.CMD_NUM
@@ -42,7 +41,7 @@ class Client():
         cmd_and_data = cmd.to_bytes(1, 'big') + Data
         enc_cmd_and_data = cipher.encrypt(cmd_and_data)
         uname_bytes = pad(bytes(username, 'utf-8'), 10)
-        message = TS.to_bytes(4, 'big') + CMD_NUM.to_bytes(1, 'big') + uname_bytes + enc_cmd_and_data
+        message = msg_type.to_bytes(1,'big') + TS.to_bytes(4, 'big') + CMD_NUM.to_bytes(1, 'big') + uname_bytes + enc_cmd_and_data
         h = HMAC.new(self.client_generated_keys[CMD_NUM], digestmod=SHA256)
         MAC = h.update(message).hexdigest()
         message += bytes.fromhex(MAC)
@@ -81,7 +80,7 @@ class Client():
     def decodeMsg(self, MSG: bytes):
         MAC_GOT = MSG[len(MSG) - 32:]
         REST_OF_MSG = MSG[:len(MSG) - 32]
-        CMD_NUM: bytes = REST_OF_MSG[4:5]
+        CMD_NUM: bytes = REST_OF_MSG[5:6]
         key = self.client_generated_keys[int.from_bytes(CMD_NUM, 'big')]
         self.CMD_NUM = int.from_bytes(CMD_NUM, 'big')
         h = HMAC.new(key, digestmod=SHA256)
@@ -90,10 +89,10 @@ class Client():
         # print(len(MAC_GOT))
         if MAC_GOT != MAC:
             raise ValueError("Mac values are not the same aborting...")
-        TS: bytes = REST_OF_MSG[:4]
-        CMD_NUM: bytes = REST_OF_MSG[4:5]
-        USERNAME: bytes = REST_OF_MSG[5:15]
-        ENC_MSG: bytes = REST_OF_MSG[15:]
+        TS: bytes = REST_OF_MSG[1:5]
+        CMD_NUM: bytes = REST_OF_MSG[5:6]
+        USERNAME: bytes = REST_OF_MSG[6:16]
+        ENC_MSG: bytes = REST_OF_MSG[16:]
 
         nonce = TS[2:] + int.from_bytes(CMD_NUM, 'big').to_bytes(2, 'big')
         cipher = AES.new(key, AES.MODE_CTR, nonce=nonce)
@@ -117,8 +116,8 @@ class Client():
             saveFile(filename, data)
             print(f"{filename} downloaded")
 
-    def genPrivateKey(self): #TODO: generate real masterKey
-        self.client_master_key=bytes.fromhex("746869732069732064656661756c7420")
+    def genPrivateKey(self):  # TODO: generate real masterKey
+        self.client_master_key = bytes.fromhex("746869732069732064656661756c7420")
         return bytes.fromhex("746869732069732064656661756c7420")
 
 
@@ -130,7 +129,7 @@ if __name__ == "__main__":
     c = Client(input(f"give username:"))
     netif = network_interface(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "\\DSR\\", "C")
     # Generate Master and send it to Server
-    netif.send_msg("S",pad(bytes(c.username,'utf-8'),10)+c.genPrivateKey())
+    netif.send_msg("S", pad(bytes(c.username, 'utf-8'), 10) + c.genPrivateKey())
 
     c.generateKeysFromMaster()
     while True:
@@ -138,5 +137,7 @@ if __name__ == "__main__":
         if msg:
             netif.send_msg("S", msg)
             stat, msg_r = netif.receive_msg(blocking=True)
-            MSG_R = c.decodeMsg(msg_r)
-            c.processMessage(MSG_R)
+            msg_type = int.from_bytes(msg_r[0:1], 'big')
+            if msg_type == 2: # DSR TYPE message
+                MSG_R = c.decodeMsg(msg_r)
+                c.processMessage(MSG_R)
