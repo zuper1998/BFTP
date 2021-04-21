@@ -100,8 +100,8 @@ class Server:
         h = HMAC.new(key, digestmod=SHA256)
 
         MAC = bytes.fromhex(h.update(REST_OF_MSG).hexdigest())
-        print(len(MAC))
-        print(len(MAC_GOT))
+        #print(len(MAC))
+        #print(len(MAC_GOT))
 
         if MAC_GOT != MAC:
             raise ValueError("Mac values are not the same aborting...")
@@ -112,7 +112,7 @@ class Server:
         ENC_MSG: bytes = REST_OF_MSG[16:]
 
         enc_text = ENC_MSG
-        nonce = TS[2:] + int.from_bytes(CMD_NUM, 'big').to_bytes(2, 'big')
+        nonce = TS[2:] + int.from_bytes(CMD_NUM, 'big').to_bytes(2, 'big') #TODO: fix CMD_NUM being max 1 bytes
         # print(f"Nonce {nonce}")
         cipher = AES.new(key, AES.MODE_CTR, nonce=nonce)
         text: bytes = cipher.decrypt(enc_text)

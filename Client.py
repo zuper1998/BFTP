@@ -11,7 +11,7 @@ from Server import Message, Commands
 from netsim.netinterface import network_interface
 
 
-# DSR C-> S  TS | CMD_NUM | USER_NAME | CMD | DATA* | MAC
+# DSR C-> S  MSG_TYPE | TS | CMD_NUM | USER_NAME | CMD | DATA* | MAC
 
 
 class Client():
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     netif = network_interface(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "\\DSR\\", "C")
     # Generate Master and send it to Server
     netif.send_msg("S", pad(bytes(c.username, 'utf-8'), 10) + c.genPrivateKey())
-
+    #  Authenticated user
     c.generateKeysFromMaster()
     while True:
         msg = c.getCommand(input(f"{os.path.dirname(os.path.dirname(os.path.abspath(__file__)))} $"))
