@@ -45,7 +45,7 @@ class Message:
         self.MAC = MAC
 
 
-class User:
+class User: #TODO: persistent storage
     server_master_key = bytes.fromhex("746869732069732064656661756c7420")  # Default key, it wont work with it
     server_key_list = []
     current_dir = ""
