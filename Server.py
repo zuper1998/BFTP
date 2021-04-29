@@ -261,11 +261,19 @@ class Server:
     def genServerHello(self):
         return
 
-    # Register User
+    # Registers User. Returns str message about the success of the registration.
     def registerUser(self, DATA: bytes,username: str):
+        #TODO 3 branches: return "Registration successful. Welcome <username>!"
+        # return "Registration failed. Username already exists."
+        # return "Registration failed. Password empty." Ez mehetne client oldalra is?
         self.addUser(username, bytes)
         return "Registration successful"
 
+    # User login. Returns str message about the success of login.
+    def loginUser(self):
+        #TODO 2 branches: return "Login successful. Welcome <username>!"
+        # return "Login failed: wrong password or username does not exist."
+        return ""
 
 def file_in_directory(file, directory):  # Stolen from https://stackoverflow.com/questions/3812849/how-to-check-whether
     # -a-directory-is-a-sub-directory-of-another-directory make both absolute
@@ -310,3 +318,7 @@ if __name__ == "__main__":
             else:
                 reply = s.genReply(bytes(str(reply_data), 'utf-8'), MSG.USER_NAME, Commands.RPLY.value)
                 netif.send_msg("C", reply)
+        elif msg_type == MsgType.Login:
+            reply_data: str = loginUser(msg)
+        elif msg_type == MsgType.Register:
+            reply_data: str = registerUser(msg)

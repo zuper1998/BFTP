@@ -121,6 +121,12 @@ class Client():
         self.client_master_key = bytes.fromhex("746869732069732064656661756c7420")
         return bytes.fromhex("746869732069732064656661756c7420")
 
+    def genRegisterMsg(self):
+        return
+
+    def genLoginMsg(self):
+        return
+
     def genClientHello(self):
         msg_type: int = MsgType.ClientHello
 
@@ -138,10 +144,23 @@ class Client():
 def saveFile(name: str, Data: bytes):
     open(f"{os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), name)}", "wb").write(Data)
 
-
 if __name__ == "__main__":
+    """ logged_in: bool = False
+    while(not logged_in):
+        choice = input("Login/Register? (L/R): ")
+        if(choice.upper == "L" or choice == "Login"):
+            user_name = input("Enter username to login: ")
+            password = input("Password: ")
+            #TODO
+        elif(choice.upper == "R" or choice == "Register"):
+            user_name = input("Enter username to register: ")
+            password = input("Password: ")
+            #TODO
+     """
+
     c = Client(input(f"give username:"))
     netif = network_interface(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "\\DSR\\", "C")
+
     # Generate Master and send it to Server
     netif.send_msg("S", pad(bytes(c.username, 'utf-8'), 10) + c.genPrivateKey())
     #  Authenticated user
