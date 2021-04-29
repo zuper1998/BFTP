@@ -7,7 +7,7 @@ import os
 import time
 from enum import Enum
 
-from Server import Message, Commands
+from Common import MsgType, Message, Commands
 from netsim.netinterface import network_interface
 
 
@@ -15,6 +15,7 @@ from netsim.netinterface import network_interface
 
 
 class Client():
+    server_public_key: bytes
     client_master_key: bytes = bytes(0)
     client_generated_keys = []
     username = ""
@@ -120,6 +121,19 @@ class Client():
         self.client_master_key = bytes.fromhex("746869732069732064656661756c7420")
         return bytes.fromhex("746869732069732064656661756c7420")
 
+    def genClientHello(self):
+        msg_type: int = MsgType.ClientHello
+
+        message = msg_type.to_bytes(1,'big')
+
+        h = HMAC.new(self.client_generated_keys[CMD_NUM], digestmod=SHA256)
+        MAC = h.update(message).hexdigest()
+        message += bytes.fromhex(MAC)
+        # print(message)
+        return message
+
+    def decodeServerHello(self, MSG: bytes):
+        return
 
 def saveFile(name: str, Data: bytes):
     open(f"{os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), name)}", "wb").write(Data)

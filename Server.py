@@ -11,39 +11,9 @@ from netsim.netinterface import network_interface
 from Crypto.Util.Padding import unpad, pad
 from pathvalidate import sanitize_filepath, sanitize_filename, sanitize_file_path
 
+from Common import MsgType, Message, Commands
+
 MAX_TIME_WINDOW = 30  # Max 3 seconds from send
-
-
-class Commands(Enum):
-    MKD = 0
-    RMD = 1
-    GWD = 2
-    CWD = 3
-    LST = 4
-    UPL = 5
-    DNL = 6
-    RMF = 7
-    RPLY = 8
-    RPLY_UPL = 9
-
-
-
-class Message:
-    TS: int
-    CMD_NUM: int
-    USER_NAME: str
-    CMD: int
-    DATA: bytes
-    MAC: bytes
-
-    def __init__(self, TS, CMD_NUM, USER_NAME, CMD, DATA, MAC):
-        self.TS = TS
-        self.CMD_NUM = CMD_NUM
-        self.USER_NAME = USER_NAME
-        self.CMD = CMD
-        self.DATA = DATA
-        self.MAC = MAC
-
 
 class User: #TODO: persistent storage
     server_master_key = bytes.fromhex("746869732069732064656661756c7420")  # Default key, it wont work with it
@@ -76,6 +46,19 @@ class User: #TODO: persistent storage
 
 class Server:
     users = [] # TODO: Persistence
+    private_key: bytes #How to store it safely?
+
+    #Reads private key from storage.
+    def readPrivateKey(self):
+        return
+
+    #Loads users from storage.
+    def loadUsers(self):
+        return
+    
+    #Saves users to storage.
+    def saveUsers(self):
+        return
 
     def addUser(self, Uname, Server_Master):
         BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -272,6 +255,12 @@ class Server:
         message += bytes.fromhex(MAC)
         return message
 
+    def decodeClientHello(self, MSG: bytes):
+        return
+
+    def genServerHello(self):
+        return
+
     # Register User
     def registerUser(self, DATA: bytes,username: str):
         self.addUser(username, bytes)
@@ -302,7 +291,6 @@ if __name__ == "__main__":
     s = Server()
     netif = network_interface(s.utilGetCurDir(user=User("")) + "\\DSR\\", "S")
     print(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    # TODO: Register and key exchange
     status, msg = netif.receive_msg(blocking=True)
     s.addUser(unpad(msg[:10],10).decode('utf-8'), msg[10:])
 
@@ -310,7 +298,10 @@ if __name__ == "__main__":
 
         status, msg = netif.receive_msg(blocking=True)
         msg_type = int.from_bytes(msg[0:1], 'big')
-        if msg_type == 2:
+        if msg_type == MsgType.ClientHello:
+            decodeClientHello(msg)
+            genServerHello()
+        elif msg_type == MsgType.GenReply:
             MSG = s.decodeMSG(msg)
             reply_data = s.doCommand(MSG)
             if MSG.CMD == Commands.DNL.value:
