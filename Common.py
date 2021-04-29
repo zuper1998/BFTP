@@ -1,6 +1,6 @@
-from enum import Enum
+from enum import Enum, IntEnum
 
-class MsgType(Enum):
+class MsgType(IntEnum):
     ClientHello = 0
     ServerHello = 1
     GenReply = 2

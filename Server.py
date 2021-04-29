@@ -256,9 +256,15 @@ class Server:
         return message
 
     def decodeClientHello(self, MSG: bytes):
+        # ...
+        
         return
 
     def genServerHello(self):
+        msg_type: int = MsgType.ServerHello
+
+        message = msg_type.to_bytes(1, 'big')
+
         return
 
     # Registers User. Returns str message about the success of the registration.
@@ -318,7 +324,7 @@ if __name__ == "__main__":
             else:
                 reply = s.genReply(bytes(str(reply_data), 'utf-8'), MSG.USER_NAME, Commands.RPLY.value)
                 netif.send_msg("C", reply)
-        elif msg_type == MsgType.Login:
-            reply_data: str = loginUser(msg)
-        elif msg_type == MsgType.Register:
-            reply_data: str = registerUser(msg)
+        # elif msg_type == MsgType.Login:
+        #     reply_data: str = loginUser(msg)
+        # elif msg_type == MsgType.Register:
+        #     reply_data: str = registerUser(msg)

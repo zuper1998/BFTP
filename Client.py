@@ -3,6 +3,7 @@ from Crypto.Protocol.KDF import scrypt
 from Crypto.Hash import SHA3_256, SHA256
 from Crypto.Hash import HMAC
 from Crypto.Util.Padding import pad, unpad
+from Crypto.PublicKey import RSA
 import os
 import time
 from enum import Enum
@@ -25,7 +26,7 @@ class Client():
         self.client_master_key = bytes(0)  # Default key, it wont work with it
         if len(username) > 9:
             raise ValueError(f"Username is too long, it should be 9 characters long maximum, but it is {len(username)}")
-        self.username = username
+        #self.username = username
 
     def generateKeysFromMaster(self):
         salt = SHA256.new(bytes(self.username, 'utf-8')).hexdigest()
@@ -121,16 +122,35 @@ class Client():
         self.client_master_key = bytes.fromhex("746869732069732064656661756c7420")
         return bytes.fromhex("746869732069732064656661756c7420")
 
-    def genRegisterMsg(self):
-        return
-
-    def genLoginMsg(self):
-        return
-
-    def genClientHello(self):
-        msg_type: int = MsgType.ClientHello
-
+    # Generates registration message
+    def genRegisterMsg(self, user_name: str, password: str):
+        msg_type: int = MsgType.Register
+        #TODO
         message = msg_type.to_bytes(1,'big')
+        #TODO
+        h = HMAC.new(self.client_generated_keys[CMD_NUM], digestmod=SHA256)
+        MAC = h.update(message).hexdigest()
+        message += bytes.fromhex(MAC)
+        # print(message)
+        return message
+
+    # Generates login message
+    def genLoginMsg(self, user_name: str, password: str):
+        msg_type: int = MsgType.Login
+        #TODO add data to message
+        message = msg_type.to_bytes(1,'big')
+        #TODO ad data to message
+        h = HMAC.new(self.client_generated_keys[CMD_NUM], digestmod=SHA256)
+        MAC = h.update(message).hexdigest()
+        message += bytes.fromhex(MAC)
+        # print(message)
+        return message
+
+    #Generates keyshare message
+    def genKeyShare(self):
+        msg_type: int = MsgType.ClientHello
+        encrypted_private_key = RSA.import_key(self.server_public_key).encrypt(self.client_master_key)
+        message = msg_type.to_bytes(1,'big') + encrypted_private_key #needs padding
 
         h = HMAC.new(self.client_generated_keys[CMD_NUM], digestmod=SHA256)
         MAC = h.update(message).hexdigest()
@@ -139,26 +159,32 @@ class Client():
         return message
 
     def decodeServerHello(self, MSG: bytes):
+
         return
 
 def saveFile(name: str, Data: bytes):
     open(f"{os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), name)}", "wb").write(Data)
 
 if __name__ == "__main__":
+    c = Client(input(f"give username:"))
+
     """ logged_in: bool = False
-    while(not logged_in):
+    while not logged_in :
         choice = input("Login/Register? (L/R): ")
-        if(choice.upper == "L" or choice == "Login"):
+        if str.upper(choice) == "L" or choice == "Login":
             user_name = input("Enter username to login: ")
             password = input("Password: ")
-            #TODO
-        elif(choice.upper == "R" or choice == "Register"):
+            message = c.genLoginMsg(user_name, password)
+            netif.send_msg("S", message)
+            #TODO waiting for response from the server, if status is successful, den set logged_in to True
+        elif str.upper(choice) == "R" or choice == "Register":
             user_name = input("Enter username to register: ")
             password = input("Password: ")
-            #TODO
-     """
-
-    c = Client(input(f"give username:"))
+            message = c.genRegisterMsg(user_name, password)
+            netif.send_msg("S", message)
+            #TODO waiting for response from the server, if status is successful, den set logged_in to True"""
+    
+    
     netif = network_interface(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "\\DSR\\", "C")
 
     # Generate Master and send it to Server
