@@ -257,7 +257,7 @@ class Server:
 
     def decodeClientHello(self, MSG: bytes):
         # ...
-        
+
         return
 
     def genServerHello(self):
@@ -265,13 +265,13 @@ class Server:
 
         message = msg_type.to_bytes(1, 'big')
 
-        return
+        return message
 
     # Registers User. Returns str message about the success of the registration.
     def registerUser(self, DATA: bytes,username: str):
         #TODO 3 branches: return "Registration successful. Welcome <username>!"
         # return "Registration failed. Username already exists."
-        # return "Registration failed. Password empty." Ez mehetne client oldalra is?
+        # return "Registration failed. Password empty."
         self.addUser(username, bytes)
         return "Registration successful"
 
