@@ -11,41 +11,11 @@ from netsim.netinterface import network_interface
 from Crypto.Util.Padding import unpad, pad
 from pathvalidate import sanitize_filepath, sanitize_filename, sanitize_file_path
 
+from Common import MsgType, Message, Commands
+
 MAX_TIME_WINDOW = 30  # Max 3 seconds from send
 
-
-class Commands(Enum):
-    MKD = 0
-    RMD = 1
-    GWD = 2
-    CWD = 3
-    LST = 4
-    UPL = 5
-    DNL = 6
-    RMF = 7
-    RPLY = 8
-    RPLY_UPL = 9
-
-
-
-class Message:
-    TS: int
-    CMD_NUM: int
-    USER_NAME: str
-    CMD: int
-    DATA: bytes
-    MAC: bytes
-
-    def __init__(self, TS, CMD_NUM, USER_NAME, CMD, DATA, MAC):
-        self.TS = TS
-        self.CMD_NUM = CMD_NUM
-        self.USER_NAME = USER_NAME
-        self.CMD = CMD
-        self.DATA = DATA
-        self.MAC = MAC
-
-
-class User:
+class User: #TODO: persistent storage
     server_master_key = bytes.fromhex("746869732069732064656661756c7420")  # Default key, it wont work with it
     server_key_list = []
     current_dir = ""
@@ -76,6 +46,19 @@ class User:
 
 class Server:
     users = [] # TODO: Persistence
+    private_key: bytes #How to store it safely?
+
+    #Reads private key from storage.
+    def readPrivateKey(self):
+        return
+
+    #Loads users from storage.
+    def loadUsers(self):
+        return
+    
+    #Saves users to storage.
+    def saveUsers(self):
+        return
 
     def addUser(self, Uname, Server_Master):
         BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -91,8 +74,8 @@ class Server:
         MAC_GOT = MSG[len(MSG) - 32:]
         REST_OF_MSG = MSG[:len(MSG) - 32]
         user = None
-        USERNAME: bytes = REST_OF_MSG[5:15]
-        CMD_NUM: bytes = REST_OF_MSG[4:5]
+        CMD_NUM: bytes = REST_OF_MSG[5:6]
+        USERNAME: bytes = REST_OF_MSG[6:16]
         for i in self.users:
             if i.username == unpad(USERNAME, 10).decode('utf-8'):
                 user = i
@@ -100,18 +83,19 @@ class Server:
         h = HMAC.new(key, digestmod=SHA256)
 
         MAC = bytes.fromhex(h.update(REST_OF_MSG).hexdigest())
-        # print(len(MAC))
-        # print(len(MAC_GOT))
+        #print(len(MAC))
+        #print(len(MAC_GOT))
 
-        if (MAC_GOT != MAC):
+        if MAC_GOT != MAC:
             raise ValueError("Mac values are not the same aborting...")
-        TS: bytes = REST_OF_MSG[:4]
-        CMD_NUM: bytes = REST_OF_MSG[4:5]
-        USERNAME: bytes = REST_OF_MSG[5:15]
-        ENC_MSG: bytes = REST_OF_MSG[15:]
+        MSG_TYPE: bytes = REST_OF_MSG[0:1]
+        TS: bytes = REST_OF_MSG[1:5]
+        CMD_NUM: bytes = REST_OF_MSG[5:6]
+        USERNAME: bytes = REST_OF_MSG[6:16]
+        ENC_MSG: bytes = REST_OF_MSG[16:]
 
         enc_text = ENC_MSG
-        nonce = TS[2:] + int.from_bytes(CMD_NUM, 'big').to_bytes(2, 'big')
+        nonce = TS[2:] + int.from_bytes(CMD_NUM, 'big').to_bytes(2, 'big') #TODO: fix CMD_NUM being max 1 bytes
         # print(f"Nonce {nonce}")
         cipher = AES.new(key, AES.MODE_CTR, nonce=nonce)
         text: bytes = cipher.decrypt(enc_text)
@@ -248,6 +232,7 @@ class Server:
         return cur_dir
 
     def genReply(self, reply_data: bytes, uname: str, cmd: int):
+        msg_type: int = 2
 
         TS = int(time.time())
         user: User = None
@@ -264,17 +249,34 @@ class Server:
         cmd_and_data = cmd.to_bytes(1, 'big') + reply_data
         enc_cmd_and_data = cipher.encrypt(cmd_and_data)
         uname_bytes = pad(bytes(username, 'utf-8'), 10)
-        message = TS.to_bytes(4, 'big') + CMD_NUM.to_bytes(1, 'big') + uname_bytes + enc_cmd_and_data
+        message = msg_type.to_bytes(1,'big')+ TS.to_bytes(4, 'big') + CMD_NUM.to_bytes(1, 'big') + uname_bytes + enc_cmd_and_data
         h = HMAC.new(key, digestmod=SHA256)
         MAC = h.update(message).hexdigest()
         message += bytes.fromhex(MAC)
         return message
 
-    # Register User
+    # Registers User. Returns str message about the success of the registration.
     def registerUser(self, DATA: bytes,username: str):
+        #TODO decrypt
+        client_private_key: bytes
+        username: str
+        password: str
+        
+        if(username in self.users) {
+            return "Registration failed. Username already exists."
+        }
+        if(len(password) == 0):
+            return "Registration failed. Password empty."
+        
         self.addUser(username, bytes)
-        return "Registration successful"
+        # add key
+        return "Registration successful. Welcome " + username + "!"
 
+    # User login. Returns str message about the success of login.
+    def loginUser(self):
+        #if():
+        return "Login successful. Welcome " + username + "!"
+        # return "Login failed: wrong password or username does not exist."
 
 def file_in_directory(file, directory):  # Stolen from https://stackoverflow.com/questions/3812849/how-to-check-whether
     # -a-directory-is-a-sub-directory-of-another-directory make both absolute
@@ -300,19 +302,28 @@ if __name__ == "__main__":
     s = Server()
     netif = network_interface(s.utilGetCurDir(user=User("")) + "\\DSR\\", "S")
     print(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    # TODO: Register and key exchange
     status, msg = netif.receive_msg(blocking=True)
     s.addUser(unpad(msg[:10],10).decode('utf-8'), msg[10:])
 
     while True:
 
         status, msg = netif.receive_msg(blocking=True)
-        MSG = s.decodeMSG(msg)
-        reply_data = s.doCommand(MSG)
-
-        if MSG.CMD == Commands.DNL.value:
-            reply = s.genReply(reply_data, MSG.USER_NAME, Commands.RPLY_UPL.value)
-            netif.send_msg("C", reply)
-        else:
-            reply = s.genReply(bytes(str(reply_data), 'utf-8'), MSG.USER_NAME, Commands.RPLY.value)
-            netif.send_msg("C", reply)
+        msg_type = int.from_bytes(msg[0:1], 'big')
+        if msg_type == MsgType.Login:
+            reply_data: str = loginUser(msg) #also handles private key, so reply can be encoded. Only saves it, if successful.
+            #reply = s.genReply(reply_data, MSG.USER_NAME, Commands.RPLY_UPL.value)
+            #netif.send_msg("C", reply)
+        elif msg_type == MsgType.Register:
+            reply_data: str = registerUser(msg) #also handles private key, so reply can be encoded. Only saves it, if successful.
+            #reply = s.genReply(reply_data, MSG.USER_NAME, Commands.RPLY_UPL.value)
+            #netif.send_msg("C", reply)
+        elif msg_type == MsgType.GenReply:
+            MSG = s.decodeMSG(msg)
+            reply_data = s.doCommand(MSG)
+            if MSG.CMD == Commands.DNL.value:
+                reply = s.genReply(reply_data, MSG.USER_NAME, Commands.RPLY_UPL.value)
+                netif.send_msg("C", reply)
+            else:
+                reply = s.genReply(bytes(str(reply_data), 'utf-8'), MSG.USER_NAME, Commands.RPLY.value)
+                netif.send_msg("C", reply)
+        
