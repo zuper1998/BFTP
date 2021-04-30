@@ -1,3 +1,5 @@
+import pickle
+
 from Crypto.Hash import SHA256
 from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.Protocol.KDF import scrypt
@@ -6,7 +8,7 @@ from Crypto.Hash import HMAC
 import time
 from enum import Enum
 import os
-
+import pickle as Pickle
 from Crypto.PublicKey import RSA
 
 from netsim.netinterface import network_interface
@@ -48,28 +50,41 @@ class User:  # TODO: persistent storage
         self.RESP_CNT += 1
         return key
 
+    def SaveToFile(self):
+        saveLoc = os.path.join(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'Users'),
+                               self.username)
+        open(f"{saveLoc}", "wb").write(pickle.dumps(self, protocol=pickle.HIGHEST_PROTOCOL))
+
 
 class Server:
     users = []  # TODO: Persistence
     private_key: bytes  # How to store it safely?
 
-    # Reads private key from storage.
-    def readPrivateKey(self):
-        return
-
     # Loads users from storage.
     def loadUsers(self):
+        userLoc = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Users")
+        for file in os.scandir(userLoc):
+            if file.is_file():
+                file1 = open(file.path,'rb')
+                self.loadUser(file1)
+                file1.close()
         return
 
     # Saves users to storage.
     def saveUsers(self):
-        return
+        for u in self.users:
+            u.SaveToFile()
+
+    def loadUser(self, file1):
+        self.users.append(pickle.load(file1))
 
     def addUser(self, Uname, Server_Master, PWD_HASH):
         BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         user_DIR = os.path.join(BASE_DIR, Uname)
-        self.users.append(User(Uname, Server_Master, PWD_HASH))
-        print(user_DIR)
+        newUser = User(Uname, Server_Master, PWD_HASH)
+        self.users.append(newUser)
+        newUser.SaveToFile()
+
         if os.path.exists(user_DIR):
             pass
         else:
@@ -98,18 +113,14 @@ class Server:
 
         enc_text = ENC_MSG
         nonce = TS[2:] + int.from_bytes(CMD_NUM, 'big').to_bytes(2, 'big')  # TODO: fix CMD_NUM being max 1 bytes
-        # print(f"Nonce {nonce}")
         cipher = AES.new(key, AES.MODE_CTR, nonce=nonce)
         text: bytes = cipher.decrypt(enc_text)
-        # print(text)
         CMD = text[0]
         DATA = text[1:]
         TS: int = int.from_bytes(TS, 'big')
         CMD_NUM: int = int.from_bytes(CMD_NUM, 'big')
 
         USERNAME: str = unpad(USERNAME, 10).decode('utf-8')
-        # print(CMD)
-        # print(DATA)
         return Message(TS, CMD_NUM, USERNAME, CMD, DATA, MAC)
 
     def createDir(self, FolderName: str, user: User):
@@ -197,7 +208,6 @@ class Server:
                 user = u
         out = None
         cmd = Commands(msg.CMD)
-        # print(cmd)
 
         if cmd == Commands.MKD:
             out = self.createDir(sanitize_filepath(msg.DATA.decode('utf-8')), user)
@@ -228,8 +238,6 @@ class Server:
         user_DIR = os.path.join(BASE_DIR, user.username)
         cur_dir = os.path.join(user_DIR, user.current_dir)
         cur_dir = os.path.realpath(cur_dir)
-        #print(user.current_dir)
-        #print(cur_dir)
         return cur_dir
 
     def genReply(self, reply_data: bytes, uname: str, cmd: int):
@@ -269,7 +277,6 @@ class Server:
         PWD: bytes = unpad(DATA[10:26], 16)
         PRIV_KEY: bytes = DATA[26:42]
         MSG_TYPE = int.from_bytes(REST_OF_MSG[:1], 'big')
-        #print(USERNAME)
         h = HMAC.new(PRIV_KEY, digestmod=SHA256)
         MAC = bytes.fromhex(h.update(REST_OF_MSG).hexdigest())
 
@@ -291,11 +298,7 @@ class Server:
     # User login. Returns str message about the success of login.
     def loginUser(self, regMSG: RegMessage):
         for user in self.users:
-            print(user.username)
-            print(regMSG.USERNAME)
             if user.username == regMSG.USERNAME:
-                print(user.password)
-                print(SHA3_256.new().update(regMSG.PWD).hexdigest())
                 if user.password == SHA3_256.new().update(regMSG.PWD).hexdigest():
                     user.server_master_key = regMSG.PRIV_KEY
                     user.generateKeysFromMaster()
@@ -327,8 +330,9 @@ def dir_in_directory(directory1, directory2):  # Main dir first sub dir second
 
 if __name__ == "__main__":
     s = Server()
-    netif =network_interface(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "\\DSR\\", "S")
-    print(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    s.loadUsers()
+    netif = network_interface(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "\\DSR\\", "S")
+    #print(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     while True:
         status, msg = netif.receive_msg(blocking=True)
