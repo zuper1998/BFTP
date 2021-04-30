@@ -12,5 +12,5 @@ def generate_keys():
     public_key = generatedkey.publickey().exportKey()
 
 generate_keys()
-print(public_key)
-print(private_key)
+open("public.pem","w").write(public_key.decode('utf-8'))
+open("private.pem","w").write(private_key.decode('utf-8'))

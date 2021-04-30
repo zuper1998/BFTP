@@ -1,9 +1,10 @@
-from Crypto.Cipher import AES
+from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.Protocol.KDF import scrypt
 from Crypto.Hash import SHA3_256, SHA256
 from Crypto.Hash import HMAC
 from Crypto.Util.Padding import pad, unpad
 from Crypto.PublicKey import RSA
+from Crypto.Random import get_random_bytes
 import os
 import time
 from enum import Enum
@@ -26,7 +27,7 @@ class Client():
         self.client_master_key = bytes(0)  # Default key, it wont work with it
         if len(username) > 9:
             raise ValueError(f"Username is too long, it should be 9 characters long maximum, but it is {len(username)}")
-        #self.username = username
+        self.username = username
 
     def generateKeysFromMaster(self):
         salt = SHA256.new(bytes(self.username, 'utf-8')).hexdigest()
@@ -36,18 +37,18 @@ class Client():
         msg_type: int = 2
         TS = int(time.time())
 
-        CMD_NUM = self.CMD_NUM
+        CMD_NUM = self.getCMDNUMInc()
         username = self.username
         nonce = TS.to_bytes(4, 'big')[2:] + CMD_NUM.to_bytes(2, 'big')
         cipher = AES.new(self.client_generated_keys[CMD_NUM], AES.MODE_CTR, nonce=nonce)
         cmd_and_data = cmd.to_bytes(1, 'big') + Data
         enc_cmd_and_data = cipher.encrypt(cmd_and_data)
         uname_bytes = pad(bytes(username, 'utf-8'), 10)
-        message = msg_type.to_bytes(1,'big') + TS.to_bytes(4, 'big') + CMD_NUM.to_bytes(1, 'big') + uname_bytes + enc_cmd_and_data
+        message = msg_type.to_bytes(1, 'big') + TS.to_bytes(4, 'big') + CMD_NUM.to_bytes(1,
+                                                                                         'big') + uname_bytes + enc_cmd_and_data
         h = HMAC.new(self.client_generated_keys[CMD_NUM], digestmod=SHA256)
         MAC = h.update(message).hexdigest()
         message += bytes.fromhex(MAC)
-        self.CMD_NUM = self.CMD_NUM + 1
         # print(message)
         return message
 
@@ -118,63 +119,72 @@ class Client():
             saveFile(filename, data)
             print(f"{filename} downloaded")
 
-    def genPrivateKey(self):  # TODO: generate real masterKey
-        self.client_master_key = bytes.fromhex("746869732069732064656661756c7420")
-        return bytes.fromhex("746869732069732064656661756c7420")
+    def genPrivateKey(self):
+        self.client_master_key = get_random_bytes(16)
+        return self.client_master_key
 
     # Generates registration message
+    # MSG_TYPE|USERNAME|PASSWORD|PRIV_KEY|MAC
+    # TODO: Remove make it more compatct ( delete the other gen msg)
     def genRegisterMsg(self, user_name: str, password: str):
         msg_type: int = MsgType.Register
-        encrypted_private_key = RSA.import_key(self.server_public_key).encrypt(self.client_master_key)
-        #TODO
-        message = msg_type.to_bytes(1,'big')
-        #TODO
-        h = HMAC.new(self.client_generated_keys[CMD_NUM], digestmod=SHA256)
-        MAC = h.update(message).hexdigest()
-        message += bytes.fromhex(MAC)
-        # print(message)
-        return message
+        PRIV_KEY: bytes = self.genPrivateKey()
+        publicKey = RSA.import_key(open("public.pem").read())
+        encrpyted_MSG = pad(bytes(user_name, 'utf-8'), 10) + pad(bytes(password, 'utf8'), 16) + PRIV_KEY
+        cipher_rsa = PKCS1_OAEP.new(publicKey)
+        encrpyted_MSG = cipher_rsa.encrypt(encrpyted_MSG)
+        MSG: bytes = msg_type.to_bytes(1, 'big') + encrpyted_MSG
+        h = HMAC.new(self.client_generated_keys[self.getCMDNUMInc()], digestmod=SHA256)
+        MAC = h.update(MSG).hexdigest()
+        MSG += bytes.fromhex(MAC)
+        return MSG
 
     # Generates login message
-    def genLoginMsg(self, user_name: str, password: str):
-        msg_type: int = MsgType.Login
-        encrypted_private_key = RSA.import_key(self.server_public_key).encrypt(self.client_master_key)
-        #TODO add data to message
-        message = msg_type.to_bytes(1,'big')
-        #TODO ad data to message
-        h = HMAC.new(self.client_generated_keys[CMD_NUM], digestmod=SHA256)
-        MAC = h.update(message).hexdigest()
-        message += bytes.fromhex(MAC)
-        # print(message)
-        return message
+    # MSG_TYPE|USERNAME|PASSWORD|PRIV_KEY|MAC
+    # PWD MAX LEN = 16!!
+    def genSetupCommunicationMsg(self, user_name: str, password: str, msg_type: int):
+        PRIV_KEY: bytes = self.genPrivateKey()
+        publicKey = RSA.import_key(open("public.pem").read())
+        encrpyted_MSG = pad(bytes(user_name, 'utf-8'), 10) + pad(bytes(password, 'utf8'), 16) + PRIV_KEY
+        cipher_rsa = PKCS1_OAEP.new(publicKey)
+        encrpyted_MSG = cipher_rsa.encrypt(encrpyted_MSG)
+        MSG: bytes = msg_type.to_bytes(1, 'big') + encrpyted_MSG
+        h = HMAC.new(PRIV_KEY, digestmod=SHA256)
+        MAC = h.update(MSG).hexdigest()
+        MSG += bytes.fromhex(MAC)
+        return MSG
+
+    def getCMDNUMInc(self):
+        out = self.CMD_NUM
+        self.CMD_NUM = self.CMD_NUM + 1
+        return out
+
 
 def saveFile(name: str, Data: bytes):
     open(f"{os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), name)}", "wb").write(Data)
 
+
 if __name__ == "__main__":
     c = Client(input(f"give username:"))
-
-    """ logged_in: bool = False
-    while not logged_in :
-        choice = input("Login/Register? (L/R): ")
-        if str.upper(choice) == "L" or choice == "Login":
-            user_name = input("Enter username to login: ")
-            password = input("Password: ")
-            message = c.genLoginMsg(user_name, password) #contains private key also
-            netif.send_msg("S", message)
-            #TODO waiting for response from the server, if status is successful, den set logged_in to True
-        elif str.upper(choice) == "R" or choice == "Register":
-            user_name = input("Enter username to register: ")
-            password = input("Password: ")
-            message = c.genRegisterMsg(user_name, password) # contains private key also
-            netif.send_msg("S", message)
-            #TODO waiting for response from the server, if status is successful, den set logged_in to True"""
-    
-    
     netif = network_interface(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "\\DSR\\", "C")
-
-    # Generate Master and send it to Server
-    netif.send_msg("S", pad(bytes(c.username, 'utf-8'), 10) + c.genPrivateKey())
+    while True:
+        choice = input("Login/Register? (L/R): ")
+        msg_type = MsgType.Login
+        if str.upper(choice) == "L" or choice == "Login":
+            msg_type = MsgType.Login
+        elif str.upper(choice) == "R" or choice == "Register":
+            msg_type = MsgType.Register
+        user_name = c.username
+        password = input("Password: ")
+        message = c.genSetupCommunicationMsg(user_name, password, msg_type)  # contains private key also
+        netif.send_msg("S", message)
+        msg_type, resp = netif.receive_msg(blocking=True)
+        print(resp)
+        if resp == bytes([1]):
+            print(f"Successfull Login/Registration")
+            break
+        else:
+            print("Error, try again")
     #  Authenticated user
     c.generateKeysFromMaster()
     while True:
@@ -183,6 +193,6 @@ if __name__ == "__main__":
             netif.send_msg("S", msg)
             stat, msg_r = netif.receive_msg(blocking=True)
             msg_type = int.from_bytes(msg_r[0:1], 'big')
-            if msg_type == 2: # DSR TYPE message
+            if msg_type == 2:  # DSR TYPE message
                 MSG_R = c.decodeMsg(msg_r)
                 c.processMessage(MSG_R)

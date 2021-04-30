@@ -1,22 +1,26 @@
 from Crypto.Hash import SHA256
-from Crypto.Cipher import AES
+from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.Protocol.KDF import scrypt
 from Crypto.Hash import SHA3_256, SHA256
 from Crypto.Hash import HMAC
 import time
 from enum import Enum
 import os
+
+from Crypto.PublicKey import RSA
+
 from netsim.netinterface import network_interface
 
 from Crypto.Util.Padding import unpad, pad
 from pathvalidate import sanitize_filepath, sanitize_filename, sanitize_file_path
 
-from Common import MsgType, Message, Commands
+from Common import MsgType, Message, Commands, RegMessage
 
 MAX_TIME_WINDOW = 30  # Max 3 seconds from send
 
-class User: #TODO: persistent storage
-    server_master_key = bytes.fromhex("746869732069732064656661756c7420")  # Default key, it wont work with it
+
+class User:  # TODO: persistent storage
+    server_master_key = bytes(0)  # Default key, it wont work with it
     server_key_list = []
     current_dir = ""
     CMD_CNT = 0
@@ -24,9 +28,10 @@ class User: #TODO: persistent storage
     username = ""
     password = ""
 
-    def __init__(self, username,ServerMasterKey=bytes.fromhex("746869732069732064656661756c7420")):
+    def __init__(self, username, ServerMasterKey, PWD):
         self.server_master_key = ServerMasterKey
         self.username = username
+        self.password = PWD
         self.generateKeysFromMaster()
 
     def generateKeysFromMaster(self):
@@ -45,30 +50,30 @@ class User: #TODO: persistent storage
 
 
 class Server:
-    users = [] # TODO: Persistence
-    private_key: bytes #How to store it safely?
+    users = []  # TODO: Persistence
+    private_key: bytes  # How to store it safely?
 
-    #Reads private key from storage.
+    # Reads private key from storage.
     def readPrivateKey(self):
         return
 
-    #Loads users from storage.
+    # Loads users from storage.
     def loadUsers(self):
         return
-    
-    #Saves users to storage.
+
+    # Saves users to storage.
     def saveUsers(self):
         return
 
-    def addUser(self, Uname, Server_Master):
+    def addUser(self, Uname, Server_Master, PWD_HASH):
         BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         user_DIR = os.path.join(BASE_DIR, Uname)
-        self.users.append(User(Uname, Server_Master))
+        self.users.append(User(Uname, Server_Master, PWD_HASH))
+        print(user_DIR)
         if os.path.exists(user_DIR):
             pass
         else:
             os.mkdir(user_DIR)
-
 
     def decodeMSG(self, MSG: bytes):
         MAC_GOT = MSG[len(MSG) - 32:]
@@ -81,10 +86,7 @@ class Server:
                 user = i
         key = user.getKeyRec(int.from_bytes(CMD_NUM, 'big'))
         h = HMAC.new(key, digestmod=SHA256)
-
         MAC = bytes.fromhex(h.update(REST_OF_MSG).hexdigest())
-        #print(len(MAC))
-        #print(len(MAC_GOT))
 
         if MAC_GOT != MAC:
             raise ValueError("Mac values are not the same aborting...")
@@ -95,7 +97,7 @@ class Server:
         ENC_MSG: bytes = REST_OF_MSG[16:]
 
         enc_text = ENC_MSG
-        nonce = TS[2:] + int.from_bytes(CMD_NUM, 'big').to_bytes(2, 'big') #TODO: fix CMD_NUM being max 1 bytes
+        nonce = TS[2:] + int.from_bytes(CMD_NUM, 'big').to_bytes(2, 'big')  # TODO: fix CMD_NUM being max 1 bytes
         # print(f"Nonce {nonce}")
         cipher = AES.new(key, AES.MODE_CTR, nonce=nonce)
         text: bytes = cipher.decrypt(enc_text)
@@ -135,7 +137,7 @@ class Server:
     def setCurDir(self, path: str, user: User):
         if os.path.exists(os.path.join(self.utilGetCurDir(user), path)):
             if self.isInUserDir(user, path):
-                user.current_dir = os.path.normpath(os.path.join(user.current_dir,path))
+                user.current_dir = os.path.normpath(os.path.join(user.current_dir, path))
 
                 return f"new path set: {os.path.join(self.utilGetCurDir(user))}"
             else:
@@ -214,21 +216,20 @@ class Server:
         if cmd == Commands.RMF:
             out = self.removeFileFromDir(sanitize_filepath(msg.DATA.decode('utf-8')), user)
 
-
         return out
 
     def isInUserDir(self, user: User, path: str):
         BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         user_DIR = os.path.join(BASE_DIR, user.username)
-        return dir_in_directory(os.path.join(self.utilGetCurDir(user), path),user_DIR)
+        return dir_in_directory(os.path.join(self.utilGetCurDir(user), path), user_DIR)
 
     def utilGetCurDir(self, user: User):
         BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         user_DIR = os.path.join(BASE_DIR, user.username)
         cur_dir = os.path.join(user_DIR, user.current_dir)
         cur_dir = os.path.realpath(cur_dir)
-        print(user.current_dir)
-        print(cur_dir)
+        #print(user.current_dir)
+        #print(cur_dir)
         return cur_dir
 
     def genReply(self, reply_data: bytes, uname: str, cmd: int):
@@ -249,34 +250,60 @@ class Server:
         cmd_and_data = cmd.to_bytes(1, 'big') + reply_data
         enc_cmd_and_data = cipher.encrypt(cmd_and_data)
         uname_bytes = pad(bytes(username, 'utf-8'), 10)
-        message = msg_type.to_bytes(1,'big')+ TS.to_bytes(4, 'big') + CMD_NUM.to_bytes(1, 'big') + uname_bytes + enc_cmd_and_data
+        message = msg_type.to_bytes(1, 'big') + TS.to_bytes(4, 'big') + CMD_NUM.to_bytes(1,
+                                                                                         'big') + uname_bytes + enc_cmd_and_data
         h = HMAC.new(key, digestmod=SHA256)
         MAC = h.update(message).hexdigest()
         message += bytes.fromhex(MAC)
         return message
 
+    def decodePrivKeyMSG(self, MSG: bytes):
+        MAC_GOT = MSG[len(MSG) - 32:]
+        REST_OF_MSG = MSG[:len(MSG) - 32]
+        # FIrst we need to get the key used in the mac so we can do the mac :D
+        ENC_DATA = REST_OF_MSG[1:]
+        PrivKey = RSA.import_key(open("private.pem").read())
+        cipher_rsa = PKCS1_OAEP.new(PrivKey)
+        DATA = cipher_rsa.decrypt(ENC_DATA)
+        USERNAME: str = unpad(DATA[:10], 10).decode('utf-8')
+        PWD: bytes = unpad(DATA[10:26], 16)
+        PRIV_KEY: bytes = DATA[26:42]
+        MSG_TYPE = int.from_bytes(REST_OF_MSG[:1], 'big')
+        #print(USERNAME)
+        h = HMAC.new(PRIV_KEY, digestmod=SHA256)
+        MAC = bytes.fromhex(h.update(REST_OF_MSG).hexdigest())
+
+        if MAC_GOT != MAC:
+            raise ValueError("Mac values are not the same aborting...")
+
+        return RegMessage(MSG_TYPE, USERNAME, PWD, PRIV_KEY)
+
     # Registers User. Returns str message about the success of the registration.
-    def registerUser(self, DATA: bytes,username: str):
-        #TODO decrypt
-        client_private_key: bytes
-        username: str
-        password: str
-        
-        if(username in self.users) {
-            return "Registration failed. Username already exists."
-        }
-        if(len(password) == 0):
-            return "Registration failed. Password empty."
-        
-        self.addUser(username, bytes)
+    def registerUser(self, regMSG: RegMessage):
+        if regMSG.USERNAME in self.users:
+            return bytes([0])  # "Registration failed."
+        if len(regMSG.PWD) == 0:
+            return bytes([0])
+        self.addUser(regMSG.USERNAME, regMSG.PRIV_KEY, PWD_HASH=SHA3_256.new().update(regMSG.PWD).hexdigest())
         # add key
-        return "Registration successful. Welcome " + username + "!"
+        return bytes([1])
 
     # User login. Returns str message about the success of login.
-    def loginUser(self):
-        #if():
-        return "Login successful. Welcome " + username + "!"
+    def loginUser(self, regMSG: RegMessage):
+        for user in self.users:
+            print(user.username)
+            print(regMSG.USERNAME)
+            if user.username == regMSG.USERNAME:
+                print(user.password)
+                print(SHA3_256.new().update(regMSG.PWD).hexdigest())
+                if user.password == SHA3_256.new().update(regMSG.PWD).hexdigest():
+                    user.server_master_key = regMSG.PRIV_KEY
+                    user.generateKeysFromMaster()
+                    return bytes([1])
+
+        return bytes([0])
         # return "Login failed: wrong password or username does not exist."
+
 
 def file_in_directory(file, directory):  # Stolen from https://stackoverflow.com/questions/3812849/how-to-check-whether
     # -a-directory-is-a-sub-directory-of-another-directory make both absolute
@@ -300,23 +327,21 @@ def dir_in_directory(directory1, directory2):  # Main dir first sub dir second
 
 if __name__ == "__main__":
     s = Server()
-    netif = network_interface(s.utilGetCurDir(user=User("")) + "\\DSR\\", "S")
+    netif =network_interface(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "\\DSR\\", "S")
     print(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    status, msg = netif.receive_msg(blocking=True)
-    s.addUser(unpad(msg[:10],10).decode('utf-8'), msg[10:])
 
     while True:
-
         status, msg = netif.receive_msg(blocking=True)
         msg_type = int.from_bytes(msg[0:1], 'big')
         if msg_type == MsgType.Login:
-            reply_data: str = loginUser(msg) #also handles private key, so reply can be encoded. Only saves it, if successful.
-            #reply = s.genReply(reply_data, MSG.USER_NAME, Commands.RPLY_UPL.value)
-            #netif.send_msg("C", reply)
+            reply_data: bytes = s.loginUser(s.decodePrivKeyMSG(msg))
+            # also handles private key, so reply can be encoded. Only saves it, if successful.
+            netif.send_msg("C", reply_data)
         elif msg_type == MsgType.Register:
-            reply_data: str = registerUser(msg) #also handles private key, so reply can be encoded. Only saves it, if successful.
-            #reply = s.genReply(reply_data, MSG.USER_NAME, Commands.RPLY_UPL.value)
-            #netif.send_msg("C", reply)
+            reply_data: bytes = s.registerUser(s.decodePrivKeyMSG(msg))
+
+            # also handles private key, so reply can be encoded. Only saves it, if successful.
+            netif.send_msg("C", reply_data)
         elif msg_type == MsgType.GenReply:
             MSG = s.decodeMSG(msg)
             reply_data = s.doCommand(MSG)
@@ -326,4 +351,3 @@ if __name__ == "__main__":
             else:
                 reply = s.genReply(bytes(str(reply_data), 'utf-8'), MSG.USER_NAME, Commands.RPLY.value)
                 netif.send_msg("C", reply)
-        
