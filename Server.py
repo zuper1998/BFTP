@@ -257,17 +257,26 @@ class Server:
 
     # Registers User. Returns str message about the success of the registration.
     def registerUser(self, DATA: bytes,username: str):
-        #TODO 3 branches: return "Registration successful. Welcome <username>!"
-        # return "Registration failed. Username already exists."
-        # return "Registration failed. Password empty."
+        #TODO decrypt
+        client_private_key: bytes
+        username: str
+        password: str
+        
+        if(username in self.users) {
+            return "Registration failed. Username already exists."
+        }
+        if(len(password) == 0):
+            return "Registration failed. Password empty."
+        
         self.addUser(username, bytes)
-        return "Registration successful"
+        # add key
+        return "Registration successful. Welcome " + username + "!"
 
     # User login. Returns str message about the success of login.
     def loginUser(self):
-        #TODO 2 branches: return "Login successful. Welcome <username>!"
+        #if():
+        return "Login successful. Welcome " + username + "!"
         # return "Login failed: wrong password or username does not exist."
-        return ""
 
 def file_in_directory(file, directory):  # Stolen from https://stackoverflow.com/questions/3812849/how-to-check-whether
     # -a-directory-is-a-sub-directory-of-another-directory make both absolute
@@ -303,10 +312,11 @@ if __name__ == "__main__":
         if msg_type == MsgType.Login:
             reply_data: str = loginUser(msg) #also handles private key, so reply can be encoded. Only saves it, if successful.
             #reply = s.genReply(reply_data, MSG.USER_NAME, Commands.RPLY_UPL.value)
-                netif.send_msg("C", reply)
+            #netif.send_msg("C", reply)
         elif msg_type == MsgType.Register:
             reply_data: str = registerUser(msg) #also handles private key, so reply can be encoded. Only saves it, if successful.
             #reply = s.genReply(reply_data, MSG.USER_NAME, Commands.RPLY_UPL.value)
+            #netif.send_msg("C", reply)
         elif msg_type == MsgType.GenReply:
             MSG = s.decodeMSG(msg)
             reply_data = s.doCommand(MSG)
