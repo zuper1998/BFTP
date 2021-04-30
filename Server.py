@@ -83,8 +83,6 @@ class Server:
         h = HMAC.new(key, digestmod=SHA256)
 
         MAC = bytes.fromhex(h.update(REST_OF_MSG).hexdigest())
-        #print(len(MAC))
-        #print(len(MAC_GOT))
 
         if MAC_GOT != MAC:
             raise ValueError("Mac values are not the same aborting...")
@@ -262,10 +260,10 @@ class Server:
         username: str
         password: str
         
-        if(username in self.users) {
+        if(username in self.users):
             return "Registration failed. Username already exists."
-        }
-        if(len(password) == 0):
+
+        if len(password) == 0:
             return "Registration failed. Password empty."
         
         self.addUser(username, bytes)
