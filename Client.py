@@ -49,7 +49,6 @@ class Client():
         h = HMAC.new(self.client_generated_keys[CMD_NUM], digestmod=SHA256)
         MAC = h.update(message).hexdigest()
         message += bytes.fromhex(MAC)
-        # print(message)
         return message
 
     def utilGetCurDir(self):
@@ -88,8 +87,6 @@ class Client():
         self.CMD_NUM = int.from_bytes(CMD_NUM, 'big')
         h = HMAC.new(key, digestmod=SHA256)
         MAC = bytes.fromhex(h.update(REST_OF_MSG).hexdigest())
-        # print(len(MAC))
-        # print(len(MAC_GOT))
         if MAC_GOT != MAC:
             raise ValueError("Mac values are not the same aborting...")
         TS: bytes = REST_OF_MSG[1:5]
@@ -165,6 +162,8 @@ def saveFile(name: str, Data: bytes):
 
 
 if __name__ == "__main__":
+
+
     c = Client(input(f"give username:"))
     netif = network_interface(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "\\DSR\\", "C")
     while True:
@@ -179,7 +178,6 @@ if __name__ == "__main__":
         message = c.genSetupCommunicationMsg(user_name, password, msg_type)  # contains private key also
         netif.send_msg("S", message)
         msg_type, resp = netif.receive_msg(blocking=True)
-        print(resp)
         if resp == bytes([1]):
             print(f"Successfull Login/Registration")
             break
