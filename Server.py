@@ -312,9 +312,10 @@ if __name__ == "__main__":
 
         status, msg = netif.receive_msg(blocking=True)
         msg_type = int.from_bytes(msg[0:1], 'big')
-        if msg_type == MsgType.ClientHello:
-            decodeClientHello(msg)
-            genServerHello()
+        if msg_type == MsgType.Login:
+            reply_data: str = loginUser(msg)
+        elif msg_type == MsgType.Register:
+            reply_data: str = registerUser(msg)
         elif msg_type == MsgType.GenReply:
             MSG = s.decodeMSG(msg)
             reply_data = s.doCommand(MSG)
@@ -324,7 +325,4 @@ if __name__ == "__main__":
             else:
                 reply = s.genReply(bytes(str(reply_data), 'utf-8'), MSG.USER_NAME, Commands.RPLY.value)
                 netif.send_msg("C", reply)
-        # elif msg_type == MsgType.Login:
-        #     reply_data: str = loginUser(msg)
-        # elif msg_type == MsgType.Register:
-        #     reply_data: str = registerUser(msg)
+        

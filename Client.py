@@ -125,6 +125,7 @@ class Client():
     # Generates registration message
     def genRegisterMsg(self, user_name: str, password: str):
         msg_type: int = MsgType.Register
+        encrypted_private_key = RSA.import_key(self.server_public_key).encrypt(self.client_master_key)
         #TODO
         message = msg_type.to_bytes(1,'big')
         #TODO
@@ -137,6 +138,7 @@ class Client():
     # Generates login message
     def genLoginMsg(self, user_name: str, password: str):
         msg_type: int = MsgType.Login
+        encrypted_private_key = RSA.import_key(self.server_public_key).encrypt(self.client_master_key)
         #TODO add data to message
         message = msg_type.to_bytes(1,'big')
         #TODO ad data to message
@@ -145,22 +147,6 @@ class Client():
         message += bytes.fromhex(MAC)
         # print(message)
         return message
-
-    #Generates keyshare message
-    def genKeyShare(self):
-        msg_type: int = MsgType.ClientHello
-        encrypted_private_key = RSA.import_key(self.server_public_key).encrypt(self.client_master_key)
-        message = msg_type.to_bytes(1,'big') + encrypted_private_key #needs padding
-
-        h = HMAC.new(self.client_generated_keys[CMD_NUM], digestmod=SHA256)
-        MAC = h.update(message).hexdigest()
-        message += bytes.fromhex(MAC)
-        # print(message)
-        return message
-
-    def decodeServerHello(self, MSG: bytes):
-
-        return
 
 def saveFile(name: str, Data: bytes):
     open(f"{os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), name)}", "wb").write(Data)
@@ -174,13 +160,13 @@ if __name__ == "__main__":
         if str.upper(choice) == "L" or choice == "Login":
             user_name = input("Enter username to login: ")
             password = input("Password: ")
-            message = c.genLoginMsg(user_name, password)
+            message = c.genLoginMsg(user_name, password) #contains private key also
             netif.send_msg("S", message)
             #TODO waiting for response from the server, if status is successful, den set logged_in to True
         elif str.upper(choice) == "R" or choice == "Register":
             user_name = input("Enter username to register: ")
             password = input("Password: ")
-            message = c.genRegisterMsg(user_name, password)
+            message = c.genRegisterMsg(user_name, password) # contains private key also
             netif.send_msg("S", message)
             #TODO waiting for response from the server, if status is successful, den set logged_in to True"""
     

@@ -1,11 +1,9 @@
 from enum import Enum, IntEnum
 
 class MsgType(IntEnum):
-    ClientHello = 0
-    ServerHello = 1
+    Register = 0
+    Login = 1
     GenReply = 2
-    Register = 3
-    Login = 4
 
 class Commands(Enum):
     MKD = 0
