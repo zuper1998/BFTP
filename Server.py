@@ -255,17 +255,28 @@ class Server:
         message += bytes.fromhex(MAC)
         return message
 
-    def decodeClientHello(self, MSG: bytes):
-        return
-
-    def genServerHello(self):
-        return
-
-    # Register User
+    # Registers User. Returns str message about the success of the registration.
     def registerUser(self, DATA: bytes,username: str):
+        #TODO decrypt
+        client_private_key: bytes
+        username: str
+        password: str
+        
+        if(username in self.users) {
+            return "Registration failed. Username already exists."
+        }
+        if(len(password) == 0):
+            return "Registration failed. Password empty."
+        
         self.addUser(username, bytes)
-        return "Registration successful"
+        # add key
+        return "Registration successful. Welcome " + username + "!"
 
+    # User login. Returns str message about the success of login.
+    def loginUser(self):
+        #if():
+        return "Login successful. Welcome " + username + "!"
+        # return "Login failed: wrong password or username does not exist."
 
 def file_in_directory(file, directory):  # Stolen from https://stackoverflow.com/questions/3812849/how-to-check-whether
     # -a-directory-is-a-sub-directory-of-another-directory make both absolute
@@ -298,9 +309,14 @@ if __name__ == "__main__":
 
         status, msg = netif.receive_msg(blocking=True)
         msg_type = int.from_bytes(msg[0:1], 'big')
-        if msg_type == MsgType.ClientHello:
-            decodeClientHello(msg)
-            genServerHello()
+        if msg_type == MsgType.Login:
+            reply_data: str = loginUser(msg) #also handles private key, so reply can be encoded. Only saves it, if successful.
+            #reply = s.genReply(reply_data, MSG.USER_NAME, Commands.RPLY_UPL.value)
+            #netif.send_msg("C", reply)
+        elif msg_type == MsgType.Register:
+            reply_data: str = registerUser(msg) #also handles private key, so reply can be encoded. Only saves it, if successful.
+            #reply = s.genReply(reply_data, MSG.USER_NAME, Commands.RPLY_UPL.value)
+            #netif.send_msg("C", reply)
         elif msg_type == MsgType.GenReply:
             MSG = s.decodeMSG(msg)
             reply_data = s.doCommand(MSG)
@@ -310,3 +326,4 @@ if __name__ == "__main__":
             else:
                 reply = s.genReply(bytes(str(reply_data), 'utf-8'), MSG.USER_NAME, Commands.RPLY.value)
                 netif.send_msg("C", reply)
+        
