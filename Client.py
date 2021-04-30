@@ -27,7 +27,7 @@ class Client():
         self.client_master_key = bytes(0)  # Default key, it wont work with it
         if len(username) > 9:
             raise ValueError(f"Username is too long, it should be 9 characters long maximum, but it is {len(username)}")
-        # self.username = username
+        self.username = username
 
     def generateKeysFromMaster(self):
         salt = SHA256.new(bytes(self.username, 'utf-8')).hexdigest()

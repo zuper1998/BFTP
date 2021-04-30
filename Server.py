@@ -69,7 +69,7 @@ class Server:
         BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         user_DIR = os.path.join(BASE_DIR, Uname)
         self.users.append(User(Uname, Server_Master, PWD_HASH))
-
+        print(user_DIR)
         if os.path.exists(user_DIR):
             pass
         else:
@@ -228,8 +228,8 @@ class Server:
         user_DIR = os.path.join(BASE_DIR, user.username)
         cur_dir = os.path.join(user_DIR, user.current_dir)
         cur_dir = os.path.realpath(cur_dir)
-        print(user.current_dir)
-        print(cur_dir)
+        #print(user.current_dir)
+        #print(cur_dir)
         return cur_dir
 
     def genReply(self, reply_data: bytes, uname: str, cmd: int):
@@ -269,7 +269,7 @@ class Server:
         PWD: bytes = unpad(DATA[10:26], 16)
         PRIV_KEY: bytes = DATA[26:42]
         MSG_TYPE = int.from_bytes(REST_OF_MSG[:1], 'big')
-
+        #print(USERNAME)
         h = HMAC.new(PRIV_KEY, digestmod=SHA256)
         MAC = bytes.fromhex(h.update(REST_OF_MSG).hexdigest())
 
@@ -291,9 +291,14 @@ class Server:
     # User login. Returns str message about the success of login.
     def loginUser(self, regMSG: RegMessage):
         for user in self.users:
-            if user.username is regMSG.USERNAME:
+            print(user.username)
+            print(regMSG.USERNAME)
+            if user.username == regMSG.USERNAME:
+                print(user.password)
+                print(SHA3_256.new().update(regMSG.PWD).hexdigest())
                 if user.password == SHA3_256.new().update(regMSG.PWD).hexdigest():
                     user.server_master_key = regMSG.PRIV_KEY
+                    user.generateKeysFromMaster()
                     return bytes([1])
 
         return bytes([0])
@@ -326,7 +331,6 @@ if __name__ == "__main__":
     print(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     while True:
-
         status, msg = netif.receive_msg(blocking=True)
         msg_type = int.from_bytes(msg[0:1], 'big')
         if msg_type == MsgType.Login:
