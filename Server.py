@@ -255,18 +255,6 @@ class Server:
         message += bytes.fromhex(MAC)
         return message
 
-    def decodeClientHello(self, MSG: bytes):
-        # ...
-
-        return
-
-    def genServerHello(self):
-        msg_type: int = MsgType.ServerHello
-
-        message = msg_type.to_bytes(1, 'big')
-
-        return message
-
     # Registers User. Returns str message about the success of the registration.
     def registerUser(self, DATA: bytes,username: str):
         #TODO 3 branches: return "Registration successful. Welcome <username>!"
@@ -313,9 +301,12 @@ if __name__ == "__main__":
         status, msg = netif.receive_msg(blocking=True)
         msg_type = int.from_bytes(msg[0:1], 'big')
         if msg_type == MsgType.Login:
-            reply_data: str = loginUser(msg)
+            reply_data: str = loginUser(msg) #also handles private key, so reply can be encoded. Only saves it, if successful.
+            #reply = s.genReply(reply_data, MSG.USER_NAME, Commands.RPLY_UPL.value)
+                netif.send_msg("C", reply)
         elif msg_type == MsgType.Register:
-            reply_data: str = registerUser(msg)
+            reply_data: str = registerUser(msg) #also handles private key, so reply can be encoded. Only saves it, if successful.
+            #reply = s.genReply(reply_data, MSG.USER_NAME, Commands.RPLY_UPL.value)
         elif msg_type == MsgType.GenReply:
             MSG = s.decodeMSG(msg)
             reply_data = s.doCommand(MSG)
