@@ -142,15 +142,14 @@ class Client():
     # Generates login message
     # MSG_TYPE|USERNAME|PASSWORD|PRIV_KEY|MAC
     # PWD MAX LEN = 16!!
-    def genLoginMsg(self, user_name: str, password: str):
+    def genSetupCommunicationMsg(self, user_name: str, password: str, msg_type: int):
         PRIV_KEY: bytes = self.genPrivateKey()
-        msg_type: int = MsgType.Login
         publicKey = RSA.import_key(open("public.pem").read())
         encrpyted_MSG = pad(bytes(user_name, 'utf-8'), 10) + pad(bytes(password, 'utf8'), 16) + PRIV_KEY
         cipher_rsa = PKCS1_OAEP.new(publicKey)
         encrpyted_MSG = cipher_rsa.encrypt(encrpyted_MSG)
         MSG: bytes = msg_type.to_bytes(1, 'big') + encrpyted_MSG
-        h = HMAC.new(self.client_generated_keys[self.getCMDNUMInc()], digestmod=SHA256)
+        h = HMAC.new(PRIV_KEY, digestmod=SHA256)
         MAC = h.update(MSG).hexdigest()
         MSG += bytes.fromhex(MAC)
         return MSG
@@ -167,27 +166,25 @@ def saveFile(name: str, Data: bytes):
 
 if __name__ == "__main__":
     c = Client(input(f"give username:"))
-
-    """ logged_in: bool = False
-    while not logged_in :
-        choice = input("Login/Register? (L/R): ")
-        if str.upper(choice) == "L" or choice == "Login":
-            user_name = input("Enter username to login: ")
-            password = input("Password: ")
-            message = c.genLoginMsg(user_name, password) #contains private key also
-            netif.send_msg("S", message)
-            #TODO waiting for response from the server, if status is successful, den set logged_in to True
-        elif str.upper(choice) == "R" or choice == "Register":
-            user_name = input("Enter username to register: ")
-            password = input("Password: ")
-            message = c.genRegisterMsg(user_name, password) # contains private key also
-            netif.send_msg("S", message)
-            #TODO waiting for response from the server, if status is successful, den set logged_in to True"""
-
     netif = network_interface(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "\\DSR\\", "C")
-
-    # Generate Master and send it to Server
-    netif.send_msg("S", pad(bytes(c.username, 'utf-8'), 10) + c.genPrivateKey())
+    while True:
+        choice = input("Login/Register? (L/R): ")
+        msg_type = MsgType.Login
+        if str.upper(choice) == "L" or choice == "Login":
+            msg_type = MsgType.Login
+        elif str.upper(choice) == "R" or choice == "Register":
+            msg_type = MsgType.Register
+        user_name = c.username
+        password = input("Password: ")
+        message = c.genSetupCommunicationMsg(user_name, password, msg_type)  # contains private key also
+        netif.send_msg("S", message)
+        msg_type, resp = netif.receive_msg(blocking=True)
+        print(resp)
+        if resp == bytes([1]):
+            print(f"Successfull Login/Registration")
+            break
+        else:
+            print("Error, try again")
     #  Authenticated user
     c.generateKeysFromMaster()
     while True:

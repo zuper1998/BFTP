@@ -1,9 +1,11 @@
 from enum import Enum, IntEnum
 
+
 class MsgType(IntEnum):
     Register = 0
     Login = 1
     GenReply = 2
+
 
 class Commands(Enum):
     MKD = 0
@@ -16,6 +18,7 @@ class Commands(Enum):
     RMF = 7
     RPLY = 8
     RPLY_UPL = 9
+
 
 class Message:
     TS: int
@@ -32,3 +35,16 @@ class Message:
         self.CMD = CMD
         self.DATA = DATA
         self.MAC = MAC
+
+
+class RegMessage:
+    MSG_TYPE: int
+    USERNAME: str
+    PWD: bytes
+    PRIV_KEY: bytes
+
+    def __init__(self, MSG_TYPE, USERNAME, PWD, PRIV_KEY):
+        self.MSG_TYPE = MSG_TYPE
+        self.USERNAME = USERNAME
+        self.PWD = PWD
+        self.PRIV_KEY = PRIV_KEY
