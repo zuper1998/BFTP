@@ -8,6 +8,7 @@ from Crypto.Random import get_random_bytes
 import os
 import time
 from enum import Enum
+import pyfiglet
 
 from Common import MsgType, Message, Commands
 from netsim.netinterface import network_interface
@@ -163,6 +164,7 @@ def saveFile(name: str, Data: bytes):
 
 if __name__ == "__main__":
 
+    print(pyfiglet.figlet_format("Bundas Kenyer Protocol"))
 
     c = Client(input(f"give username:"))
     netif = network_interface(os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "\\DSR\\", "C")
